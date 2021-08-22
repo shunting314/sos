@@ -1,2 +1,6 @@
 scratch
 .*.swp
+out/
+# this file is too large. Instead of commiting it, we commit the script to download it:
+# doc/download-intel-developer-manual.sh
+doc/intel-developer-manual.pdf
