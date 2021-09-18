@@ -1,6 +1,6 @@
 .code16
 .org 0x7c00
-  # clear the screen by setting the text mode
+  # clear the screen by setting the video mode
   movb $0, %ah
   movb $3, %al
   int $0x10

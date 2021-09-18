@@ -1,6 +1,9 @@
 #!/usr/bin/env python3.6
 import sys
 import re
+import os
+
+verbose = True if os.environ.get('VERBOSE', None) else False
 
 def resolve_reloc(outlist, addr_map, reloc_map):
     for addr, (reltype, sym) in reloc_map.items():
@@ -30,10 +33,11 @@ outlist = []
 reloc_map = {} # addr -> (reltype, sym)
 addr_map = {} # sym -> addr
 with open(inpath) as inf:
+    start_addr = -1
     for line in inf.readlines():
         line = line.rstrip()
 
-        print(f"Line: {line}")
+        if verbose: print(f"Line: {line}")
         # add to addr_map. Example: "0000000000007c15 msg:"
         m = re.match("([A-Fa-f0-9]+) ([A-Za-z_][A-Za-z0-9_]*):", line)
         if m:
@@ -50,18 +54,48 @@ with open(inpath) as inf:
             continue
 
         # assembly instruction. Example: "  7c2b: 65 6c  insb    %dx, %es:(%rdi)"
-        m = re.match(r"[ \t]*[A-Fa-f0-9]+:(( [A-Fa-f0-9]{2})+)", line)
+        m = re.match(r"[ \t]*([A-Fa-f0-9]+):(( [A-Fa-f0-9]{2})+)", line)
         if m:
-            print(f"Match: {m[1]}")
-            for dual in m[1].strip().split(' '):
+            if verbose: print(f"Match: {m[2]}")
+            addr = int(m[1], 16)
+            if start_addr < 0:
+                start_addr = addr
+
+            idx = addr - start_addr
+            for dual in m[2].strip().split(' '):
                 dual = dual.lower()
                 assert len(dual) == 2
-                outlist.append(int(dual, 16))
+                if idx >= len(outlist):
+                    outlist = outlist + [0] * (idx + 1 - len(outlist))
+                outlist[idx] = int(dual, 16)
+                # Simply appending can not handle the weird case like:
+                #     7c50: e9 06 00 b4 0e                jmp     246677510 <load_disk_out+0xeb40002>
+                #     0000000000007c53 print_error:
+                #             7c53: b4 0e                         movb    $14, %ah
+                # outlist.append(int(dual, 16))
+                idx += 1
     assert len(outlist) <= 510
+    print(f"The bootloader has {len(outlist)} effective bytes")
     outlist.extend([0] * (510 - len(outlist)) + [0x55, 0xaa])
 
 resolve_reloc(outlist, addr_map, reloc_map)
 with open(outpath, 'wb') as outf:
     outf.write(bytes(outlist))
-print(addr_map)
-print(reloc_map)
+    # pad an extra sector
+    msg = "Message from sector 2!\r\n"
+    pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
+    outf.write(pad)
+    msg = "Message from sector 3!\r\n"
+    pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
+    outf.write(pad)
+    msg = "Message from sector 4!\r\n"
+    pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
+    outf.write(pad)
+if verbose: 
+    print("address map:")
+    for k, v in addr_map.items():
+        print(f"  {k}: {v:x}")
+if verbose:
+    print("reloc map:")
+    for k, v in reloc_map.items():
+        print(f"  {k:x}: {v}")
