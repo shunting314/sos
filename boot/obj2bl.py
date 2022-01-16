@@ -82,15 +82,15 @@ resolve_reloc(outlist, addr_map, reloc_map)
 with open(outpath, 'wb') as outf:
     outf.write(bytes(outlist))
     # pad an extra sector
-    msg = "Message from sector 2!\r\n"
-    pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
-    outf.write(pad)
-    msg = "Message from sector 3!\r\n"
-    pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
-    outf.write(pad)
-    msg = "Message from sector 4!\r\n"
-    pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
-    outf.write(pad)
+    # msg = "Message from sector 2!\r\n"
+    # pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
+    # outf.write(pad)
+    # msg = "Message from sector 3!\r\n"
+    # pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
+    # outf.write(pad)
+    # msg = "Message from sector 4!\r\n"
+    # pad = msg.encode('utf-8') + (b'\0' * (512 - len(msg)))
+    # outf.write(pad)
 if verbose: 
     print("address map:")
     for k, v in addr_map.items():

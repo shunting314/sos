@@ -1,0 +1,6 @@
+#!/bin/bash
+# TODO have trouble embedding this inside Makefile thus a standalone file
+
+FSIZ=`wc -c out/kernel/kernel | awk '{print $1}'`
+MAX_SIZE=`printf "%d\n" 0xF0000` # max kernel size
+test "$FSIZ" -lt "$MAX_SIZE"

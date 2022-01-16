@@ -13,6 +13,9 @@ DL register needs to be set to the identifier of the disk that we want to load d
 
 We need specify the first sector to read data from. To specify a sector, we need provide a tuple of (cylinder number, head number, sector number). Note that sector number starts from 1 while cyliner number and head number start from 0.
 
+# Enter Protected Mode and load kernel
+Check comment in boot/bootloader.s for the procedure.
+
 # Tools
 ## objdump
 Use `objdump -d` to disassemble generated objective file. objdump accepts an option '--reloc' to also print relocation entries interleaved with the disassembled code.

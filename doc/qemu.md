@@ -22,8 +22,9 @@ Type 'ctrl-shift-up/down' to scroll up or down in qemu monitor.
 Here are some useful qemu monitor commands:
 
 - 'x addr': check the contennt of the memory address
-- 'print $eax': print eax register
+- 'print $eax' or 'p $eax': print eax register
 - 'print $cs': print cs register
 - 'print $eflags': print eflags register
 - 'print /d sth': print in decimal foramt
 - 'print /x sth': print in hexadecimal foramt
+- 'x /10i addr': disassemble 10 instructions at the specified address. Super useful
