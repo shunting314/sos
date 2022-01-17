@@ -2,9 +2,13 @@ CC=i686-elf-gcc
 LD=i686-elf-ld
 OBJCOPY=i686-elf-objcopy
 
+CFLAGS=-I. -Iinc
+
 run: image
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
-	qemu-system-x86_64 -nographic -monitor telnet::1234,server,nowait -hda out/kernel.img
+	# Using -nographic option does not show content written to the vga memory.
+	# Use -curses works. Check https://stackoverflow.com/questions/6710555/how-to-use-qemu-to-run-a-non-gui-os-on-the-terminal for details.
+	qemu-system-x86_64 -curses -monitor telnet::1234,server,nowait -hda out/kernel.img
 
 # run qemu in graphic mode
 run-graph: image
@@ -18,7 +22,9 @@ image: kernel bootloader
 kernel: kernel/entry.s kernel/kernel.ld
 	mkdir -p out/kernel
 	$(CC) -c kernel/entry.s -o out/kernel/entry.o
-	$(LD) out/kernel/entry.o -T kernel/kernel.ld -o out/kernel/kernel
+	$(CC) -c kernel/kernel_main.c $(CFLAGS) -o out/kernel/kernel_main.o
+	$(CC) -c kernel/vga.c $(CFLAGS) -o out/kernel/vga.o
+	$(LD) out/kernel/entry.o out/kernel/kernel_main.o out/kernel/vga.o -T kernel/kernel.ld -o out/kernel/kernel
 
 bootloader: boot/bootloader.s
 	mkdir -p out/boot
