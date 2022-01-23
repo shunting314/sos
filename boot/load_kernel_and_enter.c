@@ -77,7 +77,7 @@ void load_kernel_and_enter() {
     if (phdr->p_type == PT_LOAD) {
       // memcpy
       char *src_addr = elf_file_start + phdr->p_offset;
-      char *dst_addr = phdr->p_vaddr;
+      char *dst_addr = (void *) phdr->p_vaddr;
       char *src_addr_end = elf_file_start + phdr->p_offset + phdr->p_filesz;
       for (; src_addr != src_addr_end; ++src_addr, ++dst_addr) {
         *dst_addr = *src_addr;

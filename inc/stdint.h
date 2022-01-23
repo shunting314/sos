@@ -1,6 +1,8 @@
 #ifndef STDINT_H
 #define STDINT_H
 
+#include <assert.h>
+
 typedef char int8_t;
 typedef unsigned char uint8_t;
 typedef short int int16_t;
@@ -10,6 +12,13 @@ typedef unsigned int uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
 
-// TODO add static assert for the size of ench of the type above.
+static_assert(sizeof(int8_t) == 1);
+static_assert(sizeof(uint8_t) == 1, "Check size of uint8_t");
+static_assert(sizeof(int16_t) == 2);
+static_assert(sizeof(uint16_t) == 2);
+static_assert(sizeof(int32_t) == 4);
+static_assert(sizeof(uint32_t) == 4);
+static_assert(sizeof(int64_t) == 8);
+static_assert(sizeof(uint64_t) == 8);
 
 #endif
