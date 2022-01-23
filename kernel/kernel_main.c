@@ -7,10 +7,10 @@ void kernel_main() {
   // show_flashing_digits();
   // show_running_curve();
   for (int i = 0; i < 100; ++i) {
-    printf("Hello, World!\n");
+    puts("Hello, World!");
   }
-  printf("abc\n");
-  printf("def\n");
+  puts("abc");
+  puts("def");
   while (1) {
   }
 }

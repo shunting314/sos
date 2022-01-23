@@ -8,3 +8,12 @@ int printf(const char* fmt, ...) {
   }
   return 0; // TODO return value!
 }
+
+int puts(const char *s) {
+  int i;
+  for (i = 0; s[i]; ++i) {
+    vga_putchar(s[i]);
+  }
+  vga_putchar('\n');
+  return i;
+}
