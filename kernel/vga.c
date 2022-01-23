@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define BASE ((uint16_t*) 0xB8000)
 #define NROW 25
@@ -12,6 +13,31 @@ int vga_to_loc(int r, int c) {
 
 void vga_set_char(int r, int c, int ch) {
   BASE[vga_to_loc(r, c)] = ch; 
+}
+
+int _cursor_loc = 0;
+
+void vga_putchar(char ch) {
+  if (ch == '\r') {
+    _cursor_loc -= (_cursor_loc % NCOL);
+  } else if (ch == '\n') {
+    // treated as '\r' plus '\n' here
+    _cursor_loc -= (_cursor_loc % NCOL);
+    _cursor_loc += NCOL;
+  } else {
+    BASE[_cursor_loc] = (ch) | (GRAY_ON_BLACK << 8);
+    _cursor_loc++;
+  }
+
+  // scroll if needed
+  if (_cursor_loc >= NROW * NCOL) {
+    // We need scroll at most 1 row
+    memmove(BASE, BASE + NCOL, (NROW - 1) * NCOL * sizeof(uint16_t));
+    for (int c = 0; c < NCOL; ++c) {
+      vga_set_char(NROW - 1, c, ' ' | (GRAY_ON_BLACK << 8));
+    }
+    _cursor_loc -= NCOL;
+  }
 }
 
 void vga_clear() {

@@ -2,7 +2,8 @@ CC=i686-elf-gcc
 LD=i686-elf-ld
 OBJCOPY=i686-elf-objcopy
 
-CFLAGS=-I. -Iinc
+# -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
+CFLAGS=-I. -Iinc -fno-builtin-printf
 
 run: image
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
@@ -19,12 +20,16 @@ image: kernel bootloader
 	cat out/boot/bootloader.bl out/kernel/kernel > out/kernel.img
 	truncate -s `printf "%d\n" 0x50200` out/kernel.img
 
+# TODO: clearnup makefile so adding new file becomes easier
 kernel: kernel/entry.s kernel/kernel.ld
 	mkdir -p out/kernel
+	mkdir -p out/lib
 	$(CC) -c kernel/entry.s -o out/kernel/entry.o
 	$(CC) -c kernel/kernel_main.c $(CFLAGS) -o out/kernel/kernel_main.o
 	$(CC) -c kernel/vga.c $(CFLAGS) -o out/kernel/vga.o
-	$(LD) out/kernel/entry.o out/kernel/kernel_main.o out/kernel/vga.o -T kernel/kernel.ld -o out/kernel/kernel
+	$(CC) -c kernel/stdio.c $(CFLAGS) -o out/kernel/stdio.o
+	$(CC) -c lib/string.c $(CFLAGS) -o out/lib/string.o
+	$(LD) out/kernel/entry.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
 
 bootloader: boot/bootloader.s
 	mkdir -p out/boot
