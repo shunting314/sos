@@ -1,4 +1,5 @@
 CC=i686-elf-gcc
+CXX=i686-elf-g++
 LD=i686-elf-ld
 OBJCOPY=i686-elf-objcopy
 
@@ -25,11 +26,13 @@ kernel: kernel/entry.s kernel/kernel.ld
 	mkdir -p out/kernel
 	mkdir -p out/lib
 	$(CC) -c kernel/entry.s -o out/kernel/entry.o
+	$(CC) -c kernel/asm_util.s -o out/kernel/asm_util.o
 	$(CC) -c kernel/kernel_main.c $(CFLAGS) -o out/kernel/kernel_main.o
 	$(CC) -c kernel/vga.c $(CFLAGS) -o out/kernel/vga.o
 	$(CC) -c kernel/stdio.c $(CFLAGS) -o out/kernel/stdio.o
+	$(CXX) -c kernel/idt.cpp $(CFLAGS) -o out/kernel/idt.o
 	$(CC) -c lib/string.c $(CFLAGS) -o out/lib/string.o
-	$(LD) out/kernel/entry.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
+	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
 
 bootloader: boot/bootloader.s
 	mkdir -p out/boot

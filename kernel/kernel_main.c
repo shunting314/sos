@@ -1,7 +1,9 @@
 #include <kernel/vga.h>
+#include <kernel/idt.h>
 #include <stdio.h>
 
 void kernel_main() {
+
   vga_clear();
   // show_palette();
   // show_flashing_digits();
@@ -11,6 +13,10 @@ void kernel_main() {
   }
   puts("abc");
   puts("def");
+
+  setup_idt();
+  asm("int $255");
+
   while (1) {
   }
 }

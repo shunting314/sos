@@ -1,4 +1,4 @@
-.globl entry
+.global entry
 entry:
   cli
   movl $stack_top, %esp
