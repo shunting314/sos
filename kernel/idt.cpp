@@ -5,6 +5,33 @@
 
 #define NIDT_ENTRY 256
 
+// NOTE: the order of fields here is reverse to the mental order:
+// the field defined in upper position comes in lower address.
+struct InterruptFrame {
+  uint32_t error_code;
+  uint32_t eip;
+  uint32_t padded_cs;
+  uint32_t eflags;
+
+  // these 2 fields are only available if previlege level changes
+  uint32_t esp;
+  uint32_t padded_ss;
+
+  void returnFromInterrupt() {
+    asm_return_from_interrupt(&eip);
+  }
+};
+
+static_assert(sizeof(InterruptFrame) == 24);
+
+// the handler for interrupts we care. Force C symbol to make it convenient to call
+// it from assembly.
+extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
+  printf("Handering interrupt %d, error code is %d\n", intNum, framePtr->error_code);
+
+  framePtr->returnFromInterrupt();
+}
+
 void noret_handler() {
   puts("interrupt not implemented!");
   while (1) {
@@ -49,6 +76,61 @@ IDTRDescriptor idtrdesc;
 
 static_assert(sizeof(IDTRDescriptor) == 6);
 
+extern "C" void set_handlers() {
+#define SET_HANDLER_FOR(no) void interrupt_entry_ ## no(); idt[no] = InterruptGateDescriptor((void*) interrupt_entry_ ## no);
+  SET_HANDLER_FOR(0);
+  SET_HANDLER_FOR(1);
+  SET_HANDLER_FOR(2);
+  SET_HANDLER_FOR(3);
+  SET_HANDLER_FOR(4);
+  SET_HANDLER_FOR(5);
+  SET_HANDLER_FOR(6);
+  SET_HANDLER_FOR(7);
+  SET_HANDLER_FOR(8);
+  SET_HANDLER_FOR(9);
+  SET_HANDLER_FOR(10);
+  SET_HANDLER_FOR(11);
+  SET_HANDLER_FOR(12);
+  SET_HANDLER_FOR(13);
+  SET_HANDLER_FOR(14);
+  SET_HANDLER_FOR(15);
+  SET_HANDLER_FOR(16);
+  SET_HANDLER_FOR(17);
+  SET_HANDLER_FOR(18);
+  SET_HANDLER_FOR(19);
+  SET_HANDLER_FOR(20);
+  SET_HANDLER_FOR(21);
+  SET_HANDLER_FOR(22);
+  SET_HANDLER_FOR(23);
+  SET_HANDLER_FOR(24);
+  SET_HANDLER_FOR(25);
+  SET_HANDLER_FOR(26);
+  SET_HANDLER_FOR(27);
+  SET_HANDLER_FOR(28);
+  SET_HANDLER_FOR(29);
+  SET_HANDLER_FOR(30);
+  SET_HANDLER_FOR(31);
+  SET_HANDLER_FOR(32);
+  SET_HANDLER_FOR(33);
+  SET_HANDLER_FOR(34);
+  SET_HANDLER_FOR(35);
+  SET_HANDLER_FOR(36);
+  SET_HANDLER_FOR(37);
+  SET_HANDLER_FOR(38);
+  SET_HANDLER_FOR(39);
+  SET_HANDLER_FOR(40);
+  SET_HANDLER_FOR(41);
+  SET_HANDLER_FOR(42);
+  SET_HANDLER_FOR(43);
+  SET_HANDLER_FOR(44);
+  SET_HANDLER_FOR(45);
+  SET_HANDLER_FOR(46);
+  SET_HANDLER_FOR(47);
+  SET_HANDLER_FOR(48);
+  SET_HANDLER_FOR(255);
+#undef SET_HANDLER_FOR
+}
+
 extern "C" void setup_idt() {
   // the following assignments are needed in a very interesting reason..
   // When we load the kernel, we didn't execute the init functions.
@@ -59,6 +141,6 @@ extern "C" void setup_idt() {
     idt[i] = InterruptGateDescriptor();
   }
   idtrdesc = IDTRDescriptor();
-
+  set_handlers();
   asm_lidt();
 }

@@ -7,6 +7,7 @@ extern "C" {
 
 // TODO use inline assembly so we can get rid of this file?
 void asm_lidt();
+void asm_return_from_interrupt(void *peip);
 
 #ifdef __cplusplus
 }
