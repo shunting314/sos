@@ -13,5 +13,3 @@ Cons:
 
 - lack some important features like page management, process, filesystem, network etc.
 - some features are implemented in a too simple way. E.g., kmalloc does not have a corresponding kfree implementation.
-
-

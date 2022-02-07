@@ -2,20 +2,21 @@
 #include <stdarg.h>
 #include <kernel/vga.h>
 
-void printnum(int num) {
+void printnum(int num, int base) {
+  static char digits[] = "0123456789abcdef";
   // handle negative number
   if (num < 0) {
     vga_putchar('-');
-    printnum(-num);
+    printnum(-num, base);
   }
   // handle single digit
-  if (num >= 0 && num <= 9) {
-    vga_putchar('0' + num);
+  if (num >= 0 && num < base) {
+    vga_putchar(digits[num]);
     return;
   }
   // handle multi digit
-  printnum(num / 10);
-  vga_putchar('0' + (num % 10));
+  printnum(num / base, base);
+  vga_putchar(digits[num % base]);
 }
 
 int printf(const char* fmt, ...) {
@@ -38,7 +39,21 @@ int printf(const char* fmt, ...) {
       switch (ch) {
       case 'd': {
         int num = va_arg(va, int);
-        printnum(num);
+        printnum(num, 10);
+        percent_mode = 0;
+        goto next;
+      }
+      case 'x': {
+        int num = va_arg(va, int);
+        printnum(num, 16);
+        percent_mode = 0;
+        goto next;
+      }
+      case 's': {
+        const char *str = va_arg(va, const char*);
+        while (*str) {
+          vga_putchar(*str++);
+        }
         percent_mode = 0;
         goto next;
       }

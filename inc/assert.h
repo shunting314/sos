@@ -21,4 +21,14 @@
   enum { CONCAT(static_assert_enum_value__, __LINE__) = 1 / !!(cond), }
 #endif
 
+// TODO: check NDEBUG?
+// TODO: fall to dead loop in kernel model. We should just kill the process in user mode
+#define assert(cond) do { \
+  if (!(cond)) { \
+    printf("%s:%d: Assertion fail: %s\n", __FILE__, __LINE__, #cond); \
+    while (1) { \
+    } \
+  } \
+} while (false)
+
 #endif

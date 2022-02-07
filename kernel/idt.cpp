@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <kernel/asm_util.h>
 #include <stdio.h>
+#include <kernel/ioport.h>
 
 #define NIDT_ENTRY 256
 
@@ -27,8 +28,16 @@ static_assert(sizeof(InterruptFrame) == 24);
 // the handler for interrupts we care. Force C symbol to make it convenient to call
 // it from assembly.
 extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
-  printf("Handering interrupt %d, error code is %d\n", intNum, framePtr->error_code);
-
+  if (intNum == 32) { // ignore timer
+    framePtr->returnFromInterrupt();
+  }
+  printf("Handering interrupt %d (0x%x), error code is %d, saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->eip);
+#if 0
+  if (intNum == 13) {
+    while (1) {
+    }
+  }
+#endif
   framePtr->returnFromInterrupt();
 }
 
@@ -52,7 +61,7 @@ class InterruptGateDescriptor {
   uint16_t off_low;
   uint16_t segment_selector = 0x08; // kernel code segment
   // assumes DPL 0, 32 bit size
-  uint16_t attr = 0x8F00;
+  uint16_t attr = 0x8E00;
   uint16_t off_high;
 } __attribute__((packed));
 
@@ -131,6 +140,29 @@ extern "C" void set_handlers() {
 #undef SET_HANDLER_FOR
 }
 
+void setup_one_8259(bool is_master) {
+  uint16_t base_port = is_master ? 0x20 : 0xA0;
+  Port8Bit a0(base_port), a1(base_port + 1);
+  uint8_t vector_offset = is_master ? 0x20 : 0x28;
+
+  // check 8259A datasheet for the initialization sequence
+  a0.write(0x11); // ICW1
+  a1.write(vector_offset); // ICW2: set vector offset
+  a1.write(is_master ? 0x04 : 0x2); // ICW3: slave connects to master IR2
+  // ICW4: pick 8086 mode;
+  // also enable AEOI (automatic end of interrupt) mode so we don't need to
+  // send an EOI command to PCI at the end of each IRQ.
+  a1.write(0x03);
+
+  a1.write(0x00); // OCW1: clear all masks
+}
+
+// map IRQ to interrupt numbers in the range of [0x20, 0x30)
+static void remap_pic() {
+  setup_one_8259(true); // setup master
+  setup_one_8259(false); // setup slave
+}
+
 extern "C" void setup_idt() {
   // the following assignments are needed in a very interesting reason..
   // When we load the kernel, we didn't execute the init functions.
@@ -143,4 +175,7 @@ extern "C" void setup_idt() {
   idtrdesc = IDTRDescriptor();
   set_handlers();
   asm_lidt();
+
+  remap_pic();
+  asm_sti();
 }

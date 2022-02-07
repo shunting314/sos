@@ -36,7 +36,7 @@ DEF_INT_ERR(17) # alignment check
 DEF_INT_NOERR(18)
 DEF_INT_NOERR(19)
 DEF_INT_NOERR(20)
-DEF_INT_NOERR(21) # control protection
+DEF_INT_ERR(21) # control protection
 DEF_INT_NOERR(22)
 DEF_INT_NOERR(23)
 DEF_INT_NOERR(24)
