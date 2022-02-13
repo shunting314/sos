@@ -19,3 +19,10 @@ asm_outb:
   movb 8(%esp), %al
   outb %al, %dx
   ret
+
+.global asm_inb
+asm_inb:
+  movw 4(%esp), %dx
+  xor %eax, %eax
+  inb %dx, %al
+  ret

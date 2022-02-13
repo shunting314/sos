@@ -57,6 +57,12 @@ int printf(const char* fmt, ...) {
         percent_mode = 0;
         goto next;
       }
+      case 'c': {
+        char arg_ch = va_arg(va, char);
+        vga_putchar(arg_ch);
+        percent_mode = 0;
+        goto next;
+      }
       default:
         break;
       }

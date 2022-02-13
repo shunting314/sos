@@ -24,6 +24,12 @@ void vga_putchar(char ch) {
     // treated as '\r' plus '\n' here
     _cursor_loc -= (_cursor_loc % NCOL);
     _cursor_loc += NCOL;
+  } else if (ch == '\t') {
+    // simply translate '\t' to 4 ' '. Do something better?
+    for (int i = 0; i < 4; ++i) {
+      vga_putchar(' ');
+    }
+    return;
   } else {
     BASE[_cursor_loc] = (ch) | (GRAY_ON_BLACK << 8);
     _cursor_loc++;

@@ -3,6 +3,7 @@
 #include <kernel/asm_util.h>
 #include <stdio.h>
 #include <kernel/ioport.h>
+#include <kernel/keyboard.h>
 
 #define NIDT_ENTRY 256
 
@@ -31,7 +32,11 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
   if (intNum == 32) { // ignore timer
     framePtr->returnFromInterrupt();
   }
-  printf("Handering interrupt %d (0x%x), error code is %d, saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->eip);
+  // printf("Handering interrupt %d (0x%x), error code is %d, saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->eip);
+  if (intNum == 32 + 1) { // keyboard
+    handleKeyboard();
+    framePtr->returnFromInterrupt();
+  }
 #if 0
   if (intNum == 13) {
     while (1) {
@@ -151,7 +156,7 @@ void setup_one_8259(bool is_master) {
   a1.write(is_master ? 0x04 : 0x2); // ICW3: slave connects to master IR2
   // ICW4: pick 8086 mode;
   // also enable AEOI (automatic end of interrupt) mode so we don't need to
-  // send an EOI command to PCI at the end of each IRQ.
+  // send an EOI command to PIC at the end of each IRQ.
   a1.write(0x03);
 
   a1.write(0x00); // OCW1: clear all masks

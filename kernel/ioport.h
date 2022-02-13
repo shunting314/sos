@@ -10,7 +10,7 @@ class Port8Bit {
   explicit Port8Bit(uint16_t port) : port_(port) { }
 
   uint8_t read() {
-    assert(false);
+    return asm_inb(port_);
   }
 
   void write(uint8_t data) {
