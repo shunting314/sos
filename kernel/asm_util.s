@@ -11,6 +11,8 @@ asm_sti:
 .global asm_return_from_interrupt
 asm_return_from_interrupt:
   mov 4(%esp), %esp
+  popa
+  addl $4, %esp # skip the error code
   iret
 
 .global asm_outb

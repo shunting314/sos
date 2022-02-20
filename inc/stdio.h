@@ -7,6 +7,7 @@ extern "C" {
 
 int printf(const char* fmt, ...);
 int puts(const char *s);
+int putchar(int ch);
 
 #ifdef __cplusplus
 }

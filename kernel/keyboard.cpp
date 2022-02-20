@@ -18,6 +18,57 @@ char scancodeToAscii[128] = {
   0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
 };
 
+#define BUFSIZ 4096
+class KeyboardInputBuffer {
+ public:
+  void addChar(char ch) {
+    assert(numBuffered() < BUFSIZ);
+    buf[(tail++) % BUFSIZ] = ch;
+  }
+
+  char getChar() {
+    assert(numBuffered() > 0);
+    return buf[(head++) % BUFSIZ];
+  }
+
+  int numBuffered() {
+    return tail - head;
+  }
+
+  void debug() {
+    printf("head %d, tail %d\n", head, tail);
+  }
+ private:
+  volatile char buf[BUFSIZ];
+  volatile int head, tail;
+} kbdBuffer;
+
+// TODO: execute init functions in ELF loader so we can do the init in the
+// constructor of kdbBuffer global variable.
+void keyboardInit() {
+  // nothing need to be done so far..
+}
+
+char keyboardGetChar() {
+  while (kbdBuffer.numBuffered() == 0) {
+  }
+  return kbdBuffer.getChar();
+}
+
+int keyboardReadLine(char* buf, int len) {
+  int nread = 0;
+  assert(len >= 2); // at least read 1 char that's not '\0'
+  while (nread < len - 1) {
+    char ch = keyboardGetChar(); // blocking call
+    buf[nread++] = ch;
+    if (ch == '\n') {
+      break;
+    }
+  }
+  buf[nread] = '\0';
+  return nread;
+}
+
 char shiftIt(char orig) {
   if (orig >= 'a' && orig <= 'z') {
     return orig - 'a' + 'A';
@@ -111,5 +162,7 @@ void handleKeyboard() {
     printf("Got a unrecognized scan code 0x%x\n", scancode);
     assert(false);
   }
-  printf("Got an ascii character '%c'(0x%x)\n", ascii, ascii);
+  // printf("Got an ascii character '%c'(0x%x)\n", ascii, ascii);
+  kbdBuffer.addChar(ascii);
+  putchar(ascii);
 }

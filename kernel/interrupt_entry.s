@@ -2,6 +2,7 @@
 #define DEF_INT_ERR(no) \
 .global interrupt_entry_ ## no; \
 interrupt_entry_ ## no: \
+  pusha; \
   push %esp;  \
   push $no; \
   call interrupt_handler
@@ -11,6 +12,7 @@ interrupt_entry_ ## no: \
 .global interrupt_entry_ ## no; \
 interrupt_entry_ ## no: \
   push $0; \
+  pusha; \
   push %esp;  \
   push $no; \
   call interrupt_handler

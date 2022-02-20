@@ -83,3 +83,8 @@ int puts(const char *s) {
   vga_putchar('\n');
   return i;
 }
+
+int putchar(int ch) {
+  vga_putchar((char) ch);
+  return ch;
+}

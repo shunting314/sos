@@ -10,6 +10,7 @@
 // NOTE: the order of fields here is reverse to the mental order:
 // the field defined in upper position comes in lower address.
 struct InterruptFrame {
+  uint32_t all_gpr[8]; // all general purpose registers pushed by pusha
   uint32_t error_code;
   uint32_t eip;
   uint32_t padded_cs;
@@ -20,11 +21,11 @@ struct InterruptFrame {
   uint32_t padded_ss;
 
   void returnFromInterrupt() {
-    asm_return_from_interrupt(&eip);
+    asm_return_from_interrupt(&all_gpr);
   }
 };
 
-static_assert(sizeof(InterruptFrame) == 24);
+static_assert(sizeof(InterruptFrame) == 24 + 32);
 
 // the handler for interrupts we care. Force C symbol to make it convenient to call
 // it from assembly.
@@ -182,5 +183,6 @@ extern "C" void setup_idt() {
   asm_lidt();
 
   remap_pic();
+  keyboardInit();
   asm_sti();
 }

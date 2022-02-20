@@ -1,5 +1,6 @@
 #include <kernel/vga.h>
 #include <kernel/idt.h>
+#include <kernel/keyboard.h>
 #include <stdio.h>
 
 void kernel_main() {
@@ -14,6 +15,13 @@ void kernel_main() {
   asm("int $48");
   puts("Back from interrupt");
 
+  char line[1024];
   while (1) {
+    printf("> ");
+    int got = keyboardReadLine(line, sizeof(line));
+    if (got > 0 && line[got - 1] == '\n') {
+      line[got - 1] = '\0';
+    }
+    printf("Got: %s\n", line);
   }
 }
