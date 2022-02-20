@@ -21,4 +21,11 @@ static_assert(sizeof(uint32_t) == 4);
 static_assert(sizeof(int64_t) == 8);
 static_assert(sizeof(uint64_t) == 8);
 
+#ifndef __cplusplus
+#define true 1
+#define false 0
+#endif
+
+#define NULL ((void*) 0)
+
 #endif

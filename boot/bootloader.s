@@ -82,6 +82,7 @@ print_nl:
 .equ CODE_SEG, 8
 .equ DATA_SEG, 16
 
+  .align 8
 gdt:
   .long 0, 0 # null segment
   .long 0x0000FFFF, 0x00CF9A00 # code segment

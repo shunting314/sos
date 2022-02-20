@@ -22,7 +22,20 @@ brew install gmp mpfr libmpc
 
 # have to use gcc (not clang) to compile the cross-compiling gcc
 export CC=`which gcc-11` # replace this to the gcc you installed
+export CXX=`which g++-11` # replace this to the gcc you installed
 export LD=`which gcc-11`
+```
+
+## gdb
+TODO
+This does not work yet. Revisit later. Having gdb available should be very helpful to debug guest OS in qemu.
+```
+wget https://ftp.gnu.org/gnu/gdb/gdb-11.2.tar.xz # latest version
+tar -xvf gdb-11.2.tar.xz
+cd gdb-11.2
+mkdir -p build/prefix
+cd build
+time ../configure --target=$TARGET --prefix=`pwd`/prefix
 ```
 
 ## binutils

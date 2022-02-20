@@ -21,3 +21,8 @@ entry:
 stack_bottom:
   .space 65536 # 64K for now
 stack_top:
+
+# define kernel_page_dir in assembly since it's easier to control the alignment
+.global kernel_page_dir
+kernel_page_dir:
+  .space 4096

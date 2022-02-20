@@ -28,3 +28,16 @@ asm_inb:
   xor %eax, %eax
   inb %dx, %al
   ret
+
+.global asm_set_cr3
+asm_set_cr3:
+  movl 4(%esp), %eax
+  movl %eax, %cr3
+  ret
+
+.global asm_cr0_enable_flags
+asm_cr0_enable_flags:
+  movl %cr0, %eax
+  orl 4(%esp), %eax
+  movl %eax, %cr0
+  ret

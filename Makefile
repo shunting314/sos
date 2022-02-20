@@ -10,7 +10,8 @@ run: image
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
 	# Using -nographic option does not show content written to the vga memory.
 	# Use -curses works. Check https://stackoverflow.com/questions/6710555/how-to-use-qemu-to-run-a-non-gui-os-on-the-terminal for details.
-	qemu-system-x86_64 -curses -monitor telnet::1234,server,nowait -hda out/kernel.img
+	# simulate 10M memory
+	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
 
 # run qemu in graphic mode
 run-graph: image
@@ -32,9 +33,11 @@ kernel: kernel/entry.s kernel/kernel.ld
 	$(CC) -c kernel/stdio.c $(CFLAGS) -o out/kernel/stdio.o
 	$(CXX) -c kernel/idt.cpp $(CFLAGS) -o out/kernel/idt.o
 	$(CXX) -c kernel/keyboard.cpp $(CFLAGS) -o out/kernel/keyboard.o
+	$(CC) -c kernel/paging.c $(CFLAGS) -o out/kernel/paging.o
+	$(CC) -c kernel/phys_page.c $(CFLAGS) -o out/kernel/phys_page.o
 	$(CC) -c kernel/interrupt_entry.S -o out/kernel/interrupt_entry.o
 	$(CC) -c lib/string.c $(CFLAGS) -o out/lib/string.o
-	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/kernel/keyboard.o out/kernel/interrupt_entry.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
+	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/kernel/keyboard.o out/kernel/paging.o out/kernel/phys_page.o out/kernel/interrupt_entry.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
 
 bootloader: boot/bootloader.s
 	mkdir -p out/boot

@@ -28,3 +28,4 @@ Here are some useful qemu monitor commands:
 - 'print /d sth': print in decimal foramt
 - 'print /x sth': print in hexadecimal foramt
 - 'x /10i addr': disassemble 10 instructions at the specified address. Super useful
+- 'info tlb': check paging

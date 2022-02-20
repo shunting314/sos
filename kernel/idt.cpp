@@ -33,17 +33,15 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
   if (intNum == 32) { // ignore timer
     framePtr->returnFromInterrupt();
   }
-  // printf("Handering interrupt %d (0x%x), error code is %d, saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->eip);
   if (intNum == 32 + 1) { // keyboard
     handleKeyboard();
     framePtr->returnFromInterrupt();
   }
-#if 0
-  if (intNum == 13) {
-    while (1) {
-    }
+  if (intNum == 48) { // do nothing for syscall for now
+    framePtr->returnFromInterrupt();
   }
-#endif
+  printf("Handering interrupt %d (0x%x), error code is %d, saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->eip);
+  assert(false && "Interrupt not implemented yet");
   framePtr->returnFromInterrupt();
 }
 

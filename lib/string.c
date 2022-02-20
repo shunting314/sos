@@ -20,3 +20,11 @@ void *memmove(void *dst, void *src, int n) {
   }
   return dst;
 }
+
+void *memset(void *va, int c, uint32_t size) {
+  char *ca = (char *) va;
+  for (int i = 0; i < size; ++i) {
+    ca[i] = c;
+  }
+  return va; 
+}
