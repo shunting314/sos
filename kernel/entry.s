@@ -2,9 +2,38 @@
 entry:
   cli
   movl $stack_top, %esp
+
+  lgdt gdt_desc
+  jmp $CODE_SEG, $reset_cs
+reset_cs:
+  mov $DATA_SEG, %ax
   call kernel_main
+  mov %ax, %ds
+  mov %ax, %es
+  mov %ax, %fs
+  mov %ax, %gs
+  mov %ax, %ss
 1:
   jmp 1b
+
+.equ CODE_SEG, 8
+.equ DATA_SEG, 16
+
+  .align 8
+gdt:
+  .long 0, 0 # null segment
+  .long 0x0000FFFF, 0x00CF9A00 # kernel code segment
+  .long 0x0000FFFF, 0x00CF9200 # kernel data segment
+  .long 0x0000FFFF, 0x00CFFA00 # user code segment
+  .long 0x0000FFFF, 0x00CFF200 # user data segment
+.global tss_segment_desc
+tss_segment_desc:
+  .long 0, 0 # placeholder for TSS
+gdt_end:
+
+gdt_desc:
+  .word gdt_end - gdt - 1
+  .long gdt
 
 # setup a quite large kernel stack
 # There was a tricky bug. boot/bootloader.s has limitation that we load at most

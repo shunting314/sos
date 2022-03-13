@@ -4,7 +4,7 @@ LD=i686-elf-ld
 OBJCOPY=i686-elf-objcopy
 
 # -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
-CFLAGS=-I. -Iinc -fno-builtin-printf -Werror
+CFLAGS=-I. -Iinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch
 
 run: image
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
@@ -33,11 +33,13 @@ kernel: kernel/entry.s kernel/kernel.ld
 	$(CC) -c kernel/stdio.c $(CFLAGS) -o out/kernel/stdio.o
 	$(CXX) -c kernel/idt.cpp $(CFLAGS) -o out/kernel/idt.o
 	$(CXX) -c kernel/keyboard.cpp $(CFLAGS) -o out/kernel/keyboard.o
+	$(CXX) -c kernel/user_process.cpp $(CFLAGS) -o out/kernel/user_process.o
+	$(CXX) -c kernel/tss.cpp $(CFLAGS) -o out/kernel/tss.o
 	$(CC) -c kernel/paging.c $(CFLAGS) -o out/kernel/paging.o
 	$(CC) -c kernel/phys_page.c $(CFLAGS) -o out/kernel/phys_page.o
 	$(CC) -c kernel/interrupt_entry.S -o out/kernel/interrupt_entry.o
 	$(CC) -c lib/string.c $(CFLAGS) -o out/lib/string.o
-	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/kernel/keyboard.o out/kernel/paging.o out/kernel/phys_page.o out/kernel/interrupt_entry.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
+	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/kernel/keyboard.o out/kernel/user_process.o out/kernel/tss.o out/kernel/paging.o out/kernel/phys_page.o out/kernel/interrupt_entry.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
 
 bootloader: boot/bootloader.s
 	mkdir -p out/boot

@@ -15,6 +15,8 @@ void asm_outb(uint16_t port, uint8_t data);
 uint8_t asm_inb(uint16_t port);
 void asm_set_cr3(uint32_t phys_addr);
 void asm_cr0_enable_flags(uint32_t flags);
+void asm_enter_user_mode(uint32_t stack, uint32_t eip);
+void asm_load_tr();
 
 #ifdef __cplusplus
 }

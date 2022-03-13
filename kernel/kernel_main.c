@@ -3,7 +3,18 @@
 #include <kernel/keyboard.h>
 #include <kernel/paging.h>
 #include <kernel/phys_page.h>
+#include <kernel/user_process.h>
+#include <kernel/tss.h>
 #include <stdio.h>
+
+void launch_manual_user_process() {
+  /*
+   * nop
+   * 1: jmp 1b
+   */
+  uint8_t code[] = { 0x90, 0xeb, 0xfe};
+  create_process_and_run(code, sizeof(code) / sizeof(code[0]));
+}
 
 void kernel_main() {
   vga_clear();
@@ -17,6 +28,10 @@ void kernel_main() {
 
   setup_phys_page_freelist();
   setup_paging();
+  setup_tss();
+
+  // TODO support consuming a list of commands in kernel mode
+  launch_manual_user_process();
 
   char line[1024];
   while (1) {

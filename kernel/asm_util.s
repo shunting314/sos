@@ -41,3 +41,23 @@ asm_cr0_enable_flags:
   orl 4(%esp), %eax
   movl %eax, %cr0
   ret
+
+.global asm_enter_user_mode
+asm_enter_user_mode:
+  push %ebp
+  mov %esp, %ebp
+ 
+  push $35 # user ss
+  mov 8(%ebp), %eax
+  push %eax # esp
+  push $0 # TODO should it be ok to set eflags to 0 to start user process?
+  push $27 # user cs
+  mov 12(%ebp), %eax
+  push %eax # eip
+  iret
+
+.global asm_load_tr
+asm_load_tr:
+  mov $40, %ax
+  ltr %ax
+  ret

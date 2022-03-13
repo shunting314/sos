@@ -24,6 +24,7 @@ uint32_t alloc_phys_page() {
 }
 
 void setup_phys_page_freelist() {
+  assert(phys_mem_amount % 4096 == 0);
   uint32_t first_free_page = ((((uint32_t) END) + 0xFFF) & ~0xFFF);
   int nalloc = 0;
   for (uint32_t free_page = first_free_page; free_page + 0xFFF < phys_mem_amount; free_page += 4096) {

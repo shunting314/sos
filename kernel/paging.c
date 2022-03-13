@@ -6,13 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define MAP_FLAG_WRITE (1UL << 0)
-#define MAP_FLAG_USER (1UL << 1)
-
-extern char kernel_page_dir[];
-extern char END[];
-
-typedef uint32_t phys_addr_t;
 struct paging_entry {
   uint32_t present : 1;
   uint32_t r_w : 1;
@@ -64,6 +57,19 @@ void map_page(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, int ma
   ppte->phys_page_no = (pa_start >> 12);
 }
 
+void map_region_alloc(phys_addr_t page_dir, uint32_t la_start, uint32_t size, int map_flags) {
+  if (size <= 0) {
+    return;
+  }
+  assert((la_start & PAGE_OFF_MASK) == 0);
+
+  uint32_t off = 0;
+  for (; off < size; off += PAGE_SIZE) {
+    uint32_t physpg = alloc_phys_page();
+    map_page(page_dir, la_start + off, physpg, map_flags);
+  }
+}
+
 void map_region(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, uint32_t size, int map_flags) {
   if (size <= 0) {
     return;
@@ -80,7 +86,12 @@ void map_region(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, uint
 void setup_paging() {
   // NOTE: gdt is still in the range of [0x7c00, 0x7dff]
   // NOTE: not map [0, 4095] on purpose so deref NULL is invalid
-  map_region((phys_addr_t)kernel_page_dir, 4096, 4096, (uint32_t) END - 4096, MAP_FLAG_WRITE); // user no access; kernel read/write
+  //
+  // We setup identity map for all physical memory available. This enables
+  // us accessing physical memories easily.
+  // map_region((phys_addr_t)kernel_page_dir, 4096, 4096, (uint32_t) END - 4096, MAP_FLAG_WRITE); // user no access; kernel read/write
+  assert(phys_mem_amount <= 0x40000000); // TODO we can only handle at most 1G memory for now
+  map_region((phys_addr_t)kernel_page_dir, 4096, 4096, (uint32_t) phys_mem_amount - 4096, MAP_FLAG_WRITE); // user no access; kernel read/write
   asm_set_cr3((uint32_t)kernel_page_dir);
   asm_cr0_enable_flags(CR0_PG | CR0_WP);
   printf("Paging enabled.\n");
