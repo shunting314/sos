@@ -38,9 +38,10 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
     framePtr->returnFromInterrupt();
   }
   if (intNum == 48) { // do nothing for syscall for now
+    printf("Received a system call\n");
     framePtr->returnFromInterrupt();
   }
-  printf("Handering interrupt %d (0x%x), error code is %d, saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->eip);
+  printf("Handering interrupt %d (0x%x), error code is %d (0x%x), saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->error_code, framePtr->eip);
   assert(false && "Interrupt not implemented yet");
   framePtr->returnFromInterrupt();
 }
@@ -60,12 +61,25 @@ class InterruptGateDescriptor {
     uint32_t handler = (uint32_t) _handler;
     off_low = (handler & 0xFFFF);
     off_high = (handler >> 16);
+
+    attr_first_byte = 0x00;
+    attr_type = 0x0E;
+    dpl = 0;
+    present = 1;
+  }
+
+  void set_dpl(int dpl) {
+    this->dpl = dpl;
   }
  private:
   uint16_t off_low;
   uint16_t segment_selector = 0x08; // kernel code segment
   // assumes DPL 0, 32 bit size
-  uint16_t attr = 0x8E00;
+  // default member initializer for bitfield is only available in C++20. So we set the default in ctor.
+  uint16_t attr_first_byte : 8 /* = 0x00 */;
+  uint16_t attr_type : 5;
+  uint16_t dpl : 2;
+  uint16_t present : 1;
   uint16_t off_high;
 } __attribute__((packed));
 
@@ -140,6 +154,7 @@ extern "C" void set_handlers() {
   SET_HANDLER_FOR(46);
   SET_HANDLER_FOR(47);
   SET_HANDLER_FOR(48);
+  idt[48].set_dpl(3); // allow user mode call 'int $48' for system calls
   SET_HANDLER_FOR(255);
 #undef SET_HANDLER_FOR
 }

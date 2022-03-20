@@ -46,14 +46,25 @@ asm_cr0_enable_flags:
 asm_enter_user_mode:
   push %ebp
   mov %esp, %ebp
- 
+
   push $35 # user ss
   mov 8(%ebp), %eax
   push %eax # esp
-  push $0 # TODO should it be ok to set eflags to 0 to start user process?
+  # enable IF
+  push $0x200
   push $27 # user cs
   mov 12(%ebp), %eax
   push %eax # eip
+
+  # set other segment registers
+  push $35
+  pop %ds
+  push %ds
+  pop %es
+  push %ds
+  pop %fs
+  push %ds
+  pop %gs
   iret
 
 .global asm_load_tr

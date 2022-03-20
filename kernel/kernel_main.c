@@ -10,9 +10,14 @@
 void launch_manual_user_process() {
   /*
    * nop
+   * int $0x30
    * 1: jmp 1b
    */
-  uint8_t code[] = { 0x90, 0xeb, 0xfe};
+  uint8_t code[] = {
+    0x90,
+    0xcd, 0x30,
+    0xeb, 0xfe,
+  };
   create_process_and_run(code, sizeof(code) / sizeof(code[0]));
 }
 

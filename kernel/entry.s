@@ -1,7 +1,7 @@
 .global entry
 entry:
   cli
-  movl $stack_top, %esp
+  movl $kernel_stack_top, %esp
 
   lgdt gdt_desc
   jmp $CODE_SEG, $reset_cs
@@ -47,9 +47,10 @@ gdt_desc:
 # .data
 .bss
 .align 4096
-stack_bottom:
+kernel_stack_bottom:
   .space 65536 # 64K for now
-stack_top:
+.global kernel_stack_top
+kernel_stack_top:
 
 # define kernel_page_dir in assembly since it's easier to control the alignment
 .global kernel_page_dir
