@@ -5,7 +5,7 @@ OBJCOPY=i686-elf-objcopy
 OBJDUMP=i686-elf-objdump
 
 # -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
-CFLAGS=-I. -Iinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch
+CFLAGS=-I. -Iinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch $(EXTRA_CFLAGS)
 
 run: image
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
@@ -29,7 +29,7 @@ kernel: kernel/entry.s kernel/kernel.ld
 	mkdir -p out/lib
 	$(CC) -c kernel/entry.s -o out/kernel/entry.o
 	$(CC) -c kernel/asm_util.s -o out/kernel/asm_util.o
-	$(CC) -c kernel/kernel_main.c $(CFLAGS) -o out/kernel/kernel_main.o
+	$(CXX) -c kernel/kernel_main.cpp $(CFLAGS) -o out/kernel/kernel_main.o
 	$(CC) -c kernel/vga.c $(CFLAGS) -o out/kernel/vga.o
 	$(CC) -c kernel/stdio.c $(CFLAGS) -o out/kernel/stdio.o
 	$(CXX) -c kernel/idt.cpp $(CFLAGS) -o out/kernel/idt.o

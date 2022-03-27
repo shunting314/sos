@@ -2,6 +2,7 @@
 #include <kernel/phys_page.h>
 #include <kernel/paging.h>
 #include <kernel/asm_util.h>
+#include <kernel/idt.h>
 #include <assert.h>
 #include <string.h>
 
@@ -9,19 +10,41 @@
 uint32_t user_stack_start = 0x40001000;
 uint32_t user_process_va_start = 0x40008000;
 
-// TODO right now only allow a single user process. Improve this soon
-class UserProcess {
- public:
-  // TODO: store gprs information etc for the process for we can resume it
-  bool allocated_;
-} g_user_process;
+// only support at most this many processes for now
+#define N_PROCESS 1024
 
-void create_process_and_run(uint8_t* code, uint32_t len) {
-  assert(!g_user_process.allocated_);
-  g_user_process.allocated_ = true;
+UserProcess g_process_list[N_PROCESS];
+
+UserProcess* UserProcess::current_ = nullptr;
+
+void UserProcess::set_frame_for_current(InterruptFrame* framePtr) {
+  assert(UserProcess::current_);
+  UserProcess::current_->intr_frame_ = *framePtr;
+}
+
+void UserProcess::resume() {
+  current_ = this;
+  asm_set_cr3(pgdir_);
+  intr_frame_.returnFromInterrupt();
+}
+
+UserProcess* UserProcess::allocate() {
+  for (int i = 0; i < N_PROCESS; ++i) {
+    if (!g_process_list[i].allocated_) {
+      g_process_list[i].allocated_ = true;
+      return &g_process_list[i];
+    }
+  }
+  assert(false && "Already created max number of processes");
+  return (UserProcess*) nullptr;
+}
+
+UserProcess* UserProcess::create(uint8_t* code, uint32_t len) {
+  UserProcess* proc = UserProcess::allocate();
 
   // allocate page dir
   uint32_t pgdir = alloc_phys_page();
+  proc->pgdir_ = pgdir;
   memmove((void*) pgdir, (void*) kernel_page_dir, 4096);
   uint32_t pgcode = alloc_phys_page();
   // user read/write
@@ -30,6 +53,31 @@ void create_process_and_run(uint8_t* code, uint32_t len) {
   asm_set_cr3(pgdir);
   memmove((void*) user_process_va_start, (void*) code, (int) len);
 
-  // TODO record the UserProcess* for the current process
-  asm_enter_user_mode(user_process_va_start, user_process_va_start);
+  memset(&proc->intr_frame_, 0, sizeof(proc->intr_frame_));
+  proc->intr_frame_.eip = user_process_va_start;
+  proc->intr_frame_.esp = user_process_va_start;
+  proc->intr_frame_.cs = USER_CODE_SEG;
+  proc->intr_frame_.ss = USER_DATA_SEG;
+  // enable IF
+  proc->intr_frame_.eflags = 0x200;
+
+  return proc;
+}
+
+void UserProcess::sched() {
+  int start_idx = 0;
+  if (UserProcess::current_) {
+    start_idx = (UserProcess*) UserProcess::current_ - &g_process_list[0];
+  }
+  int curr_idx = start_idx;
+  for (int i = 0; i < N_PROCESS; ++i) {
+    curr_idx = (curr_idx + 1) % N_PROCESS;
+    UserProcess* next_proc = &g_process_list[curr_idx];
+    if (next_proc->allocated_) {
+      next_proc->resume();
+    }
+  }
+  // TODO: we should either always have an idle process or fall
+  // to the kernel shell
+  assert(false && "No active processes");
 }

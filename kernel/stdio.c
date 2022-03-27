@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <kernel/vga.h>
 
 void printnum(int num, int base) {
@@ -20,6 +21,17 @@ void printnum(int num, int base) {
 }
 
 int printf(const char* fmt, ...) {
+  // sometimes we want print to be slower to ease debugging and observing
+#ifdef INJECT_PRINT_DELAY
+  int busy_loop_cnt = INJECT_PRINT_DELAY;
+
+  // -DINJECT_PRINT_DELAY implies that INJECT_PRINT_DELAY == 1
+  if (busy_loop_cnt == 0 || busy_loop_cnt == 1) {
+    busy_loop_cnt = 20000000;
+  }
+  for (int i = 0; i < busy_loop_cnt; ++i) {
+  }
+#endif
   int percent_mode = 0;
   va_list va;
   va_start(va, fmt);

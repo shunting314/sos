@@ -7,7 +7,7 @@
 #include <kernel/tss.h>
 #include <stdio.h>
 
-void launch_manual_user_process() {
+UserProcess *create_process_printloop(char ch) {
   /*
    * nop
    * mov $1, %eax # syscall number 1 for write
@@ -31,11 +31,11 @@ void launch_manual_user_process() {
     0xeb, 0xde,
     0xeb, 0xfe,
   };
-  code[256] = 0x41, // data, 'A'
-  create_process_and_run(code, sizeof(code) / sizeof(code[0]));
+  code[256] = ch; // data
+  return UserProcess::create(code, sizeof(code) / sizeof(code[0]));
 }
 
-void kernel_main() {
+extern "C" void kernel_main() {
   vga_clear();
   // show_palette();
   // show_flashing_digits();
@@ -50,7 +50,11 @@ void kernel_main() {
   setup_tss();
 
   // TODO support consuming a list of commands in kernel mode
-  launch_manual_user_process();
+  printf("Create process A\n");
+  UserProcess *proc_A = create_process_printloop('A');
+  printf("Create process B\n");
+  UserProcess *proc_B = create_process_printloop('B');
+  proc_A->resume();
 
   char line[1024];
   while (1) {

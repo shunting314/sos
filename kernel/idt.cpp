@@ -5,42 +5,18 @@
 #include <kernel/ioport.h>
 #include <kernel/keyboard.h>
 #include <kernel/syscall.h>
+#include <kernel/idt.h>
+#include <kernel/user_process.h>
 
 #define NIDT_ENTRY 256
-
-// NOTE: the order of fields here is reverse to the mental order:
-// the field defined in upper position comes in lower address.
-struct InterruptFrame {
-  uint32_t edi;
-  uint32_t esi;
-  uint32_t ebp;
-  uint32_t oesp; // don't be confused with esp
-  uint32_t ebx;
-  uint32_t edx;
-  uint32_t ecx;
-  uint32_t eax;
-
-  uint32_t error_code;
-  uint32_t eip;
-  uint32_t padded_cs;
-  uint32_t eflags;
-
-  // these 2 fields are only available if previlege level changes
-  uint32_t esp; // don't be confused with oesp
-  uint32_t padded_ss;
-
-  void returnFromInterrupt() {
-    asm_return_from_interrupt(&edi);
-  }
-};
-
-static_assert(sizeof(InterruptFrame) == 24 + 32);
 
 // the handler for interrupts we care. Force C symbol to make it convenient to call
 // it from assembly.
 extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
-  if (intNum == 32) { // ignore timer
-    framePtr->returnFromInterrupt();
+  UserProcess::set_frame_for_current(framePtr);
+  if (intNum == 32) { // call scheduler for timer interrupt
+    UserProcess::sched();
+    // can not reach here
   }
   if (intNum == 32 + 1) { // keyboard
     handleKeyboard();
@@ -213,5 +189,5 @@ extern "C" void setup_idt() {
 
   remap_pic();
   keyboardInit();
-  asm_sti();
+  // asm_sti(); // don't enable in kernel mode
 }
