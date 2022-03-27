@@ -38,9 +38,10 @@ kernel: kernel/entry.s kernel/kernel.ld
 	$(CXX) -c kernel/tss.cpp $(CFLAGS) -o out/kernel/tss.o
 	$(CC) -c kernel/paging.c $(CFLAGS) -o out/kernel/paging.o
 	$(CC) -c kernel/phys_page.c $(CFLAGS) -o out/kernel/phys_page.o
+	$(CC) -c kernel/syscall.c $(CFLAGS) -o out/kernel/syscall.o
 	$(CC) -c kernel/interrupt_entry.S -o out/kernel/interrupt_entry.o
 	$(CC) -c lib/string.c $(CFLAGS) -o out/lib/string.o
-	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/kernel/keyboard.o out/kernel/user_process.o out/kernel/tss.o out/kernel/paging.o out/kernel/phys_page.o out/kernel/interrupt_entry.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
+	$(LD) out/kernel/entry.o out/kernel/asm_util.o out/kernel/kernel_main.o out/kernel/vga.o out/kernel/stdio.o out/kernel/idt.o out/kernel/keyboard.o out/kernel/user_process.o out/kernel/tss.o out/kernel/paging.o out/kernel/phys_page.o out/kernel/syscall.o out/kernel/interrupt_entry.o out/lib/string.o -T kernel/kernel.ld -o out/kernel/kernel
 	$(OBJDUMP) -d out/kernel/kernel > out/kernel/kernel.asm
 
 bootloader: boot/bootloader.s

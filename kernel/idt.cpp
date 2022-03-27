@@ -4,24 +4,33 @@
 #include <stdio.h>
 #include <kernel/ioport.h>
 #include <kernel/keyboard.h>
+#include <kernel/syscall.h>
 
 #define NIDT_ENTRY 256
 
 // NOTE: the order of fields here is reverse to the mental order:
 // the field defined in upper position comes in lower address.
 struct InterruptFrame {
-  uint32_t all_gpr[8]; // all general purpose registers pushed by pusha
+  uint32_t edi;
+  uint32_t esi;
+  uint32_t ebp;
+  uint32_t oesp; // don't be confused with esp
+  uint32_t ebx;
+  uint32_t edx;
+  uint32_t ecx;
+  uint32_t eax;
+
   uint32_t error_code;
   uint32_t eip;
   uint32_t padded_cs;
   uint32_t eflags;
 
   // these 2 fields are only available if previlege level changes
-  uint32_t esp;
+  uint32_t esp; // don't be confused with oesp
   uint32_t padded_ss;
 
   void returnFromInterrupt() {
-    asm_return_from_interrupt(&all_gpr);
+    asm_return_from_interrupt(&edi);
   }
 };
 
@@ -38,7 +47,14 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
     framePtr->returnFromInterrupt();
   }
   if (intNum == 48) { // do nothing for syscall for now
-    printf("Received a system call\n");
+#if 0
+    printf("Received a system call: eax 0x%x, args ebx 0x%x ecx 0x%x edx 0x%x esi 0x%x edi 0x%x\n",
+        framePtr->eax, framePtr->ebx, framePtr->ecx, framePtr->edx,
+        framePtr->esi, framePtr->edi);
+#endif
+    framePtr->eax = syscall(
+        framePtr->eax, framePtr->ebx, framePtr->ecx, framePtr->edx,
+        framePtr->esi, framePtr->edi);
     framePtr->returnFromInterrupt();
   }
   printf("Handering interrupt %d (0x%x), error code is %d (0x%x), saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->error_code, framePtr->eip);
