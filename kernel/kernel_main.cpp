@@ -5,6 +5,7 @@
 #include <kernel/phys_page.h>
 #include <kernel/user_process.h>
 #include <kernel/tss.h>
+#include <kernel/ide.h>
 #include <stdio.h>
 
 UserProcess *create_process_printloop(char ch) {
@@ -35,6 +36,34 @@ UserProcess *create_process_printloop(char ch) {
   return UserProcess::create(code, sizeof(code) / sizeof(code[0]));
 }
 
+void tryout_ide() {
+  printf("Tryout ide\n");
+  IDEDevice drive(0x1F0, false /* is_slave */);
+  uint8_t buf[512];
+  drive.read(buf, 0, 1);
+  for (int i = 9 ; i >= 0; --i) {
+    printf(" %x", buf[511 - i]);
+  }
+  printf("\n");
+
+  // write the first sector
+  for (int i = 0; i < 512; ++i) {
+    buf[i] = 0xcd;
+  }
+  drive.write(buf, 0, 1);
+
+  // read back
+  drive.read(buf, 0, 1);
+  for (int i = 9 ; i >= 0; --i) {
+    printf(" %x", buf[511 - i]);
+  }
+  printf("\n");
+
+  printf("Done\n");
+  while (1) {
+  }
+}
+
 extern "C" void kernel_main() {
   vga_clear();
   // show_palette();
@@ -49,12 +78,16 @@ extern "C" void kernel_main() {
   setup_paging();
   setup_tss();
 
+  tryout_ide();
+
   // TODO support consuming a list of commands in kernel mode
+#if 0
   printf("Create process A\n");
   UserProcess *proc_A = create_process_printloop('A');
   printf("Create process B\n");
   UserProcess *proc_B = create_process_printloop('B');
   proc_A->resume();
+#endif
 
   char line[1024];
   while (1) {

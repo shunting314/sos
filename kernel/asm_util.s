@@ -29,6 +29,20 @@ asm_inb:
   inb %dx, %al
   ret
 
+.global asm_outw
+asm_outw:
+  movw 4(%esp), %dx
+  movw 8(%esp), %ax
+  outw %ax, %dx
+  ret
+
+.global asm_inw
+asm_inw:
+  movw 4(%esp), %dx
+  xor %eax, %eax
+  inw %dx, %ax
+  ret
+
 .global asm_set_cr3
 asm_set_cr3:
   movl 4(%esp), %eax
