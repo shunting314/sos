@@ -49,3 +49,7 @@ class IDEDevice {
   uint16_t ioPortBase_;
   bool isSlave_;
 };
+
+static inline IDEDevice createMasterIDE() {
+  return IDEDevice(0x1F0, false);
+}

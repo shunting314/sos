@@ -18,8 +18,11 @@ UserProcess g_process_list[N_PROCESS];
 UserProcess* UserProcess::current_ = nullptr;
 
 void UserProcess::set_frame_for_current(InterruptFrame* framePtr) {
-  assert(UserProcess::current_);
-  UserProcess::current_->intr_frame_ = *framePtr;
+  // UserProcess::current_ can be nullptr if interrupt happens in kernel
+  // mode
+  if (UserProcess::current_) {
+    UserProcess::current_->intr_frame_ = *framePtr;
+  }
 }
 
 void UserProcess::resume() {
@@ -65,10 +68,11 @@ UserProcess* UserProcess::create(uint8_t* code, uint32_t len) {
 }
 
 void UserProcess::sched() {
-  int start_idx = 0;
-  if (UserProcess::current_) {
-    start_idx = (UserProcess*) UserProcess::current_ - &g_process_list[0];
+  // don't do anything if there is no current process
+  if (!UserProcess::current_) {
+    return;
   }
+  int start_idx = (UserProcess*) UserProcess::current_ - &g_process_list[0];
   int curr_idx = start_idx;
   for (int i = 0; i < N_PROCESS; ++i) {
     curr_idx = (curr_idx + 1) % N_PROCESS;

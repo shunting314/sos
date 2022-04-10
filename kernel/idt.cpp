@@ -16,10 +16,16 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
   UserProcess::set_frame_for_current(framePtr);
   if (intNum == 32) { // call scheduler for timer interrupt
     UserProcess::sched();
-    // can not reach here
+    // sched may return if there is no current process
+    // that's why we need call framePtr->returnFromInterrupt
+    framePtr->returnFromInterrupt();
   }
   if (intNum == 32 + 1) { // keyboard
     handleKeyboard();
+    framePtr->returnFromInterrupt();
+  }
+  // ignore IRQ for the primary and secondary ATA buses
+  if (intNum == 32 + 14 || intNum == 32 + 15) {
     framePtr->returnFromInterrupt();
   }
   if (intNum == 48) { // do nothing for syscall for now
@@ -189,5 +195,6 @@ extern "C" void setup_idt() {
 
   remap_pic();
   keyboardInit();
-  // asm_sti(); // don't enable in kernel mode
+  // enable interrupt in kernel mode so we can get keyboard input
+  asm_sti();
 }

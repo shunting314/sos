@@ -9,6 +9,7 @@ extern "C" {
 
 void *memmove(void *dst, void *src, int n);
 void *memset(void *va, int c, uint32_t size);
+int strcmp(const char* s, const char *t);
 
 #ifdef __cplusplus
 }

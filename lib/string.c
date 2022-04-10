@@ -28,3 +28,11 @@ void *memset(void *va, int c, uint32_t size) {
   }
   return va; 
 }
+
+int strcmp(const char *s, const char *t) {
+  while (*s && *t && *s == *t) {
+    ++s;
+    ++t;
+  }
+  return (*s) - (*t);
+}

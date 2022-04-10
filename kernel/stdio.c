@@ -9,6 +9,7 @@ void printnum(int num, int base) {
   if (num < 0) {
     vga_putchar('-');
     printnum(-num, base);
+    return;
   }
   // handle single digit
   if (num >= 0 && num < base) {
