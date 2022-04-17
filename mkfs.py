@@ -8,6 +8,7 @@ import argparse
 from dataclasses import dataclass
 import os
 from typing import List, BinaryIO
+import re
 
 BLOCK_SIZE = 4096
 DIRENT_SIZE = 128
@@ -21,6 +22,7 @@ class MkfsCtx:
     next_free_block: int
     tot_block: int
     img_file_fd: BinaryIO
+    entry_to_skip: str  # check --entry-to-skip
 
     def allocate_block(self, nblock: int) -> List[int]:
         prev = self.next_free_block
@@ -41,7 +43,7 @@ class MkfsCtx:
             assert pos % BLOCK_SIZE == 0
             block_id = blocks[pos // BLOCK_SIZE]
             self.img_file_fd.seek(block_id * BLOCK_SIZE)
-            pos += self.img_file_fd.write(bytes_to_write[pos: BLOCK_SIZE])
+            pos += self.img_file_fd.write(bytes_to_write[pos: pos + BLOCK_SIZE])
 
     def setup_freelist(self) -> int:
         head = 0
@@ -53,6 +55,11 @@ class MkfsCtx:
             self.writeint(head, 4)
             head = blkid
         return head
+
+    def should_skip_entry(self, path: str) -> bool:
+        if not self.entry_to_skip:
+            return False
+        return bool(re.search(self.entry_to_skip, path))
 
 def write_dirent(ctx: MkfsCtx, dirent_loc: int, name: str, size: int, blocklist: List[int], isdir: bool):
     ctx.img_file_fd.seek(dirent_loc)
@@ -75,6 +82,7 @@ def handle_file(ctx: MkfsCtx, dirent_loc: int, curname: str, curpath: str):
     Check the docstring for dfs
     """
     assert os.path.isfile(curpath)
+    print(f"Handle file {curpath}")
     filesize = os.path.getsize(curpath)
 
     nalloc = (filesize + BLOCK_SIZE - 1) // BLOCK_SIZE  
@@ -99,7 +107,14 @@ def dfs(ctx: MkfsCtx, dirent_loc: int, curname: str, curpath: str):
         return
     assert os.path.isdir(curpath)
 
-    entry_list = os.listdir(curpath)
+    _raw_entry_list = os.listdir(curpath)  # ., .. are not returned by os.listdir
+    entry_list = []  # entry_list after filtering
+    for entry in _raw_entry_list:
+        if ctx.should_skip_entry(entry):
+            print(f"Skipping entry {entry}")
+        else:
+            entry_list.append(entry)
+
     start_loc = ctx.next_free_block * BLOCK_SIZE
     # round up
     nalloc = (len(entry_list) + NDIRENT_PER_BLOCK - 1) // NDIRENT_PER_BLOCK
@@ -117,6 +132,7 @@ def mkfs(args: argparse.Namespace):
             next_free_block=1, # skip the super block
             tot_block=args.nblocks,
             img_file_fd=img_file_fd,
+            entry_to_skip=args.entry_to_skip,
         )
 
         # preallocate the file size
@@ -142,6 +158,7 @@ def main():
     parser.add_argument("imgpath", type=str, help="The path of the fs image to create")
     # by default create 16M size of image, which translate to 4096 blocks
     parser.add_argument("--nblocks", type=int, default=4096, help="The number of blocks the filesystem will have. Block size 4096.")
+    parser.add_argument("--entry-to-skip", type=str, default="", help="A regular expression. Skip directory entries containing this pattern")
     parser.add_argument("--skip-prompt", action="store_true", help="Whether to skip prompt. Make it hard to erase the existing image by mistake.")
     args = parser.parse_args()
 

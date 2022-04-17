@@ -2,6 +2,7 @@
 #include <kernel/keyboard.h>
 #include <kernel/vga.h>
 #include <kernel/user_process.h>
+#include <kernel/simfs.h>
 #include <kernel/ide.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +45,8 @@ int cmdShowRunningCurve(char* args[]);
 int cmdABProcess(char* args[]);
 int cmdReadSector(char* args[]);
 int cmdWriteSector(char* args[]);
+int cmdLs(char* args[]);
+int cmdCat(char* args[]);
 
 struct KernelCmd {
   const char* cmdName;
@@ -60,6 +63,13 @@ struct KernelCmd {
     cmdABProcess},
   { "read_sector", "Read sector from hda0", cmdReadSector},
   { "write_sector", "File the specified sector with the specified byte", cmdWriteSector},
+
+  // ls and cat should be implemented as user space applications.
+  // Implement simple version in kernel mode so we can test file loading
+  // from the filesystem. Kernel need this functionality to load an
+  // executable.
+  { "ls", "List the directory", cmdLs},
+  { "cat", "Show the file content", cmdCat},
   {nullptr, nullptr},
 };
 
@@ -96,20 +106,40 @@ int cmdABProcess(char* /* args */[]) {
   return 0;
 }
 
+IDEDevice createIDEDevice(int hda_id) {
+  if (hda_id == 0) {
+    return createMasterIDE();
+  } else if (hda_id == 1) {
+    return createSlaveIDE();
+  } else {
+    return IDEDevice(); // return an invalid one
+  }
+}
+
 // TODO check that the sector no does not exceed the maximum
 int cmdReadSector(char* args[]) {
+  int hda_id;
   int sectNo;
-  IDEDevice dev = createMasterIDE();
+  IDEDevice dev;
   uint8_t buf[512];
   if (!args[0]) {
     goto err_out;
   }
-  sectNo = atoi(args[0]);
+  dev = createIDEDevice(atoi(args[0]));
+  if (!dev) {
+    printf("Invalid hda id %s\n", args[0]);
+    goto err_out;
+  }
+
+  if (!args[1]) {
+    goto err_out;
+  }
+  sectNo = atoi(args[1]);
   if (sectNo < 0) {
     printf("Sector number can not be negative: %d\n", sectNo);
     goto err_out;
   }
-  printf("Read sector %d\n", sectNo);
+  printf("Read sector %d from dev %s\n", sectNo, args[0]);
   dev.read(buf, sectNo, 1);
 
   for (int i = 0; i < 512; ++i) {
@@ -120,24 +150,30 @@ int cmdReadSector(char* args[]) {
   }
   return 0;
 err_out:
-  printf("Usage: read_sector [sector no]\n");
+  printf("Usage: read_sector [hda id] [sector no]\n");
   return -1;
 }
 
 int cmdWriteSector(char* args[]) {
   auto usage = []() {
-    printf("Usage: write_sector [sector no] [fill byte]\n");
+    printf("Usage: write_sector [hda id] [sector no] [fill byte]\n");
     return -1;
   };
-  if (!args[0] || !args[1]) {
+  if (!args[0] || !args[1] || !args[2]) {
     return usage();
   }
-  int sectNo = atoi(args[0]);
+  int hda_id = atoi(args[0]);
+  IDEDevice dev = createIDEDevice(hda_id);
+  if (!dev) {
+    printf("Invalid hda id %s\n", args[0]);
+    return usage();
+  }
+  int sectNo = atoi(args[1]);
   if (sectNo < 0) {
     printf("Sector number can not be negative: %d\n", sectNo);
     return usage();
   }
-  int fillByte = atoi(args[1]);
+  int fillByte = atoi(args[2]);
   if (fillByte < 0 || fillByte > 255) {
     printf("Fill byte must between [0, 255], but got %d\n", fillByte);
     return usage();
@@ -146,10 +182,26 @@ int cmdWriteSector(char* args[]) {
   for (int i = 0; i < 512; ++i) {
     buf[i] = (uint8_t) fillByte;
   }
-  IDEDevice dev = createMasterIDE();
   printf("Write sector %d with byte 0x%x\n", sectNo, fillByte);
   dev.write(buf, sectNo, 1);
   return 0;
+}
+
+int cmdLs(char *args[]) {
+  char *path = args[0];
+  char rootdir[] = "/";
+  if (!path) {
+    path = rootdir;
+  }
+  return ls(path);
+}
+
+int cmdCat(char *args[]) {
+  if (!args[0]) {
+    printf("Missing path\n");
+    return -1;
+  }
+  return cat(args[0]);
 }
 
 char* parseCmdLine(char* line, char *args[]) {

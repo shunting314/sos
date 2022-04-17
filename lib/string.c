@@ -36,3 +36,16 @@ int strcmp(const char *s, const char *t) {
   }
   return (*s) - (*t);
 }
+
+int strncmp(const char *s, const char *t, int len) {
+  assert(len >= 0);
+
+  for (int i = 0; i < len; ++i) {
+    if (*s != *t) {
+      return (*s) - (*t);
+    }
+    ++s;
+    ++t;
+  }
+  return 0;
+}

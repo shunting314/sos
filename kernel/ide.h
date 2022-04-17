@@ -17,7 +17,7 @@ enum StatusBit {
 
 class IDEDevice {
  public:
-  IDEDevice(uint16_t ioPortBase, bool isSlave)
+  IDEDevice(uint16_t ioPortBase = 0, bool isSlave = false)
       : ioPortBase_(ioPortBase),
         isSlave_(isSlave),
         dataPort_(ioPortBase),
@@ -28,6 +28,11 @@ class IDEDevice {
         lbaHighPort_(ioPortBase + 5),
         driveRegPort_(ioPortBase + 6),
         statusCommandPort_(ioPortBase + 7) {
+  }
+
+  // port base 0 means an invalid IDEDevice
+  operator bool() const {
+    return ioPortBase_ != 0;
   }
 
   void read(uint8_t* buf, int startSectorNo, int nSector);
@@ -52,4 +57,8 @@ class IDEDevice {
 
 static inline IDEDevice createMasterIDE() {
   return IDEDevice(0x1F0, false);
+}
+
+static inline IDEDevice createSlaveIDE() {
+  return IDEDevice(0x1F0, true);
 }

@@ -1,11 +1,11 @@
 #ifndef STDLIB_H
 #define STDLIB_H
 
-int abs(int v) {
+static inline int abs(int v) {
   return v > 0 ? v : -v;
 }
 
-int atoi(const char* s) {
+static inline int atoi(const char* s) {
   int ret = 0;
   int sign = 1;
   if (*s == '+') {
@@ -41,5 +41,8 @@ int atoi(const char* s) {
   }
   return sign * ret;
 }
+
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 #endif

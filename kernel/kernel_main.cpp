@@ -4,6 +4,7 @@
 #include <kernel/phys_page.h>
 #include <kernel/tss.h>
 #include <kernel/kshell.h>
+#include <kernel/simfs.h>
 #include <stdio.h>
 
 extern "C" void kernel_main() {
@@ -14,6 +15,7 @@ extern "C" void kernel_main() {
   setup_phys_page_freelist();
   setup_paging();
   setup_tss();
+  SimFs::get().init();
 
   kshell();
 }

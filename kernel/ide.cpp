@@ -21,13 +21,16 @@ void IDEDevice::read(uint8_t* buf, int startSectorNo, int nSector) {
   sectCountPort_.write(nSector);
   setLBA(startSectorNo);
   statusCommandPort_.write(READ_SECTORS);
-  waitUntilNotBusy();
 
   // the device interprets sector count 0 as 256
   if (nSector == 0) {
     nSector = 256;
   }
   for (int i = 0; i < nSector * SECTOR_SIZE; i += 2) {
+    if (i % SECTOR_SIZE == 0) {
+      // it's crucial to wait for data to be ready before reading *EACH* sector
+      waitUntilNotBusy();
+    }
     *((uint16_t*) &buf[i]) = dataPort_.read();
   }
 }
