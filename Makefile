@@ -7,12 +7,14 @@ OBJDUMP=i686-elf-objdump
 # -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
 CFLAGS=-I. -Iinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch $(EXTRA_CFLAGS)
 
+# We put the filesystem in hdb rather than put it together with the kernel in hda
+# to make it easy to recreate kernel image while keeping the fs image.
 run: image
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
 	# Using -nographic option does not show content written to the vga memory.
 	# Use -curses works. Check https://stackoverflow.com/questions/6710555/how-to-use-qemu-to-run-a-non-gui-os-on-the-terminal for details.
 	# simulate 10M memory
-	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
+	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb out/fs.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
 
 # run qemu in graphic mode
 run-graph: image
@@ -62,4 +64,9 @@ bootloader_helloworld:
 	VERBOSE=1 boot/obj2bl.py out/boot/hello.objdump out/boot/hello.bl
 	qemu-system-x86_64 -hda out/boot/hello.bl
 
-.PHONY: bootloader_helloworld kernel
+mkfs:
+	mkdir -p out/fs_template
+	echo "Hello, simfs!" > out/fs_template/message
+	python mkfs.py out/fs_template out/fs.img $(MKFS_EXTRA)
+
+.PHONY: bootloader_helloworld kernel makefs
