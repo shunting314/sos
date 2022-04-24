@@ -12,3 +12,4 @@ An operating system I build as a hobby!
 - Support a simple filesystem similar to ext2 (WIP)
 - Support a user space shell
 - Support networking
+- Support assembler/compiler/linker (either write myself or porting existing ones)
