@@ -61,26 +61,27 @@ img out/kernel.img: out/kernel/kernel out/boot/bootloader.bl
 
 # We put the filesystem in hdb rather than put it together with the kernel in hda
 # to make it easy to recreate kernel image while keeping the fs image.
-run: out/kernel.img out/fs.img
+run: out/kernel.img fs.img
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
 	# Using -nographic option does not show content written to the vga memory.
 	# Use -curses works. Check https://stackoverflow.com/questions/6710555/how-to-use-qemu-to-run-a-non-gui-os-on-the-terminal for details.
 	# simulate 10M memory
-	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb out/fs.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
+	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
 
 # start a connection to qemu monitor
 mon:
 	nc localhost 2000
 
 # run qemu in graphic mode
-run-graph: out/kernel.img out/fs.img
-	qemu-system-x86_64 -hda out/kernel.img -hdb out/fs.img
+run-graph: out/kernel.img fs.img
+	qemu-system-x86_64 -hda out/kernel.img -hdb fs.img
 
-# will not recreate if out/fs.img already exists. This makes sure we don't drop mutations in the filesystem.
-out/fs.img:
+# will not recreate if fs.img already exists. This makes sure we don't drop mutations in the filesystem.
+# Not puting fs.img under out/ on purpose so 'make clean' does not drop it
+fsimg fs.img:
 	mkdir -p out/fs_template
 	echo "Hello, simfs!" > out/fs_template/message
-	python3.6 mkfs.py out/fs_template out/fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
+	python3.6 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:
 	rm -rf out/

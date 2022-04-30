@@ -162,7 +162,9 @@ def main():
     parser.add_argument("--skip-prompt", action="store_true", help="Whether to skip prompt. Make it hard to erase the existing image by mistake.")
     args = parser.parse_args()
 
-    if not args.skip_prompt:
+    # it's okay to go ahead recreating the file system image if the file
+    # does not exist yet
+    if not args.skip_prompt and os.path.exists(args.imgpath):
         passphrase = "GOGOGO"
         print(f"Enter '{passphrase}' if you really want to recreate the fs image!")
         print("The command will exit directly if the input is wrong.")
