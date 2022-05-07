@@ -1,47 +1,34 @@
-#include <stdio.h>
 #include <stdarg.h>
-#include <stdint.h>
-#include <kernel/vga.h>
 
-void printnum(int num, int base) {
+typedef void putchar_fn_t(char ch);
+
+void printnum(int num, int base, putchar_fn_t* putchar_fn) {
   static char digits[] = "0123456789abcdef";
   // handle negative number
   if (num < 0) {
-    vga_putchar('-');
-    printnum(-num, base);
+    putchar_fn('-');
+    printnum(-num, base, putchar_fn);
     return;
   }
   // handle single digit
   if (num >= 0 && num < base) {
-    vga_putchar(digits[num]);
+    putchar_fn(digits[num]);
     return;
   }
   // handle multi digit
-  printnum(num / base, base);
-  vga_putchar(digits[num % base]);
+  printnum(num / base, base, putchar_fn);
+  putchar_fn(digits[num % base]);
 }
 
-int printf(const char* fmt, ...) {
-  // sometimes we want print to be slower to ease debugging and observing
-#ifdef INJECT_PRINT_DELAY
-  int busy_loop_cnt = INJECT_PRINT_DELAY;
-
-  // -DINJECT_PRINT_DELAY implies that INJECT_PRINT_DELAY == 1
-  if (busy_loop_cnt == 0 || busy_loop_cnt == 1) {
-    busy_loop_cnt = 20000000;
-  }
-  for (int i = 0; i < busy_loop_cnt; ++i) {
-  }
-#endif
+// internal implementation of vprintf
+int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn) {
   int percent_mode = 0;
-  va_list va;
-  va_start(va, fmt);
   for (const char* cp = fmt; *cp; ++cp) {
     char ch = *cp;
     if (ch == '%') {
       if (percent_mode) {
         // in "%%" the first percent escape the second one and result in a literal '%'
-        vga_putchar(ch);
+        putchar_fn(ch);
       }
       percent_mode = !percent_mode;
       continue;
@@ -52,27 +39,27 @@ int printf(const char* fmt, ...) {
       switch (ch) {
       case 'd': {
         int num = va_arg(va, int);
-        printnum(num, 10);
+        printnum(num, 10, putchar_fn);
         percent_mode = 0;
         goto next;
       }
       case 'x': {
         int num = va_arg(va, int);
-        printnum(num, 16);
+        printnum(num, 16, putchar_fn);
         percent_mode = 0;
         goto next;
       }
       case 's': {
         const char *str = va_arg(va, const char*);
         while (*str) {
-          vga_putchar(*str++);
+          putchar_fn(*str++);
         }
         percent_mode = 0;
         goto next;
       }
       case 'c': {
         char arg_ch = va_arg(va, char);
-        vga_putchar(arg_ch);
+        putchar_fn(arg_ch);
         percent_mode = 0;
         goto next;
       }
@@ -81,23 +68,9 @@ int printf(const char* fmt, ...) {
       }
     }
 
-    vga_putchar(ch);
+    putchar_fn(ch);
 next:;
   }
   // should not be in percent mode here
   return 0; // TODO return value!
-}
-
-int puts(const char *s) {
-  int i;
-  for (i = 0; s[i]; ++i) {
-    vga_putchar(s[i]);
-  }
-  vga_putchar('\n');
-  return i;
-}
-
-int putchar(int ch) {
-  vga_putchar((char) ch);
-  return ch;
 }

@@ -61,7 +61,10 @@ void map_region_alloc(phys_addr_t page_dir, uint32_t la_start, uint32_t size, in
   if (size <= 0) {
     return;
   }
-  assert((la_start & PAGE_OFF_MASK) == 0);
+  if (la_start & PAGE_OFF_MASK) {
+    size += la_start & PAGE_OFF_MASK;
+    la_start &= ~PAGE_OFF_MASK;
+  }
 
   uint32_t off = 0;
   for (; off < size; off += PAGE_SIZE) {

@@ -1,6 +1,8 @@
 #ifndef KERNEL_SYSCALL_H
 #define KERNEL_SYSCALL_H
 
+#include <syscall_no.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

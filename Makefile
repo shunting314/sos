@@ -4,9 +4,15 @@ LD := i686-elf-ld
 OBJCOPY := i686-elf-objcopy
 OBJDUMP := i686-elf-objdump
 
-LIB_SRC_C := $(wildcard lib/*.c)
-LIB_OBJ := $(patsubst %.c,%.o,$(LIB_SRC_C))
-LIB_OBJ := $(addprefix out/,$(LIB_OBJ)) # add out/ prefix
+CLIB_SRC_C := $(wildcard clib/*.c)
+CLIB_SRC_CPP := $(wildcard clib/*.cpp)
+CLIB_OBJ := $(patsubst %.c,%.o,$(CLIB_SRC_C)) $(patsubst %.cpp,%.o,$(CLIB_SRC_CPP))
+CLIB_OBJ := $(addprefix out/,$(CLIB_OBJ)) # add out/ prefix
+
+ULIB_SRC_CPP := $(wildcard ulib/*.cpp)
+ULIB_SRC_S := $(wildcard ulib/*.s)
+ULIB_OBJ := $(patsubst %.cpp,%.o,$(ULIB_SRC_CPP)) $(patsubst %.s,%.o,$(ULIB_SRC_S))
+ULIB_OBJ := $(addprefix out/,$(ULIB_OBJ)) # add out/ prefix
 
 KERNEL_SRC_CPP := $(wildcard kernel/*.cpp)
 KERNEL_SRC_C := $(wildcard kernel/*.c)
@@ -14,13 +20,17 @@ KERNEL_SRC_S := $(wildcard kernel/*.s) $(wildcard kernel/*.S)
 KERNEL_OBJ := $(patsubst %.cpp,%.o,$(KERNEL_SRC_CPP)) $(patsubst %.c,%.o,$(KERNEL_SRC_C)) $(patsubst %.s,%.o,$(KERNEL_SRC_S))
 KERNEL_OBJ := $(addprefix out/,$(KERNEL_OBJ)) # add out/ prefix
 
-ALL_OBJ := $(LIB_OBJ) $(KERNEL_OBJ)
+ALL_OBJ := $(CLIB_OBJ) $(ULIB_OBJ) $(KERNEL_OBJ)
 # the list contains .d file for .s file which does not exist. But it's fine since -include
 # ignore missing files anyway.
 ALL_DEPS := $(patsubst %.o,%.d,$(ALL_OBJ))
 
 # -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
-CFLAGS := -MD -I. -Iinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch $(EXTRA_CFLAGS)
+# -Wno-pointer-arith allows arithmetic using void * assuming element size to be 1.
+#    This is only needed for C++. C compiler does not warn this by default.
+CFLAGS := -MD -I. -Icinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch -Wno-pointer-arith $(EXTRA_CFLAGS)
+
+USER_CFLAGS := $(CFLAGS) -Iuinc
 
 # set run as the default rule
 run:
@@ -28,7 +38,14 @@ run:
 out/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-	
+
+# Compiler cpp file for ulib
+# Put this before the more general 'out/%.o' pattern rule so this specialized one
+# takes effect rather than the more general one
+out/ulib/%.o: ulib/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(USER_CFLAGS) -c $< -o $@
+
 out/%.o: %.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CFLAGS) -c $< -o $@
@@ -43,9 +60,9 @@ out/%.o: %.s
 	mkdir -p $(dir $@)
 	$(CC) -c $< -o $@
 
-out/kernel/kernel: kernel/kernel.ld $(KERNEL_OBJ) $(LIB_OBJ)
+out/kernel/kernel: kernel/kernel.ld $(KERNEL_OBJ) $(CLIB_OBJ)
 	mkdir -p $(dir $@)
-	$(LD) $(KERNEL_OBJ) $(LIB_OBJ) -T kernel/kernel.ld -o $@
+	$(LD) $(KERNEL_OBJ) $(CLIB_OBJ) -T kernel/kernel.ld -o $@
 	$(OBJDUMP) -d $@ > out/kernel/kernel.asm
 
 out/boot/bootloader.bl: out/boot/bootloader.o out/boot/load_kernel_and_enter.o
@@ -82,7 +99,9 @@ fsimg fs.img:
 	mkdir -p out/fs_template
 	echo "Hello, simfs!" > out/fs_template/message
 	$(MAKE) one # don't put one as a prerequisite on purpose so fs.img does not get overriden whenever one needs to be rebuilt
+	$(MAKE) shell
 	cp out/user/one out/fs_template
+	cp out/user/shell out/fs_template
 	python3.6 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:
@@ -103,3 +122,9 @@ one:
 	mkdir -p out/user
 	$(CC) -c user/one.s -o out/user/one.o
 	$(LD) out/user/one.o -o out/user/one -e entry -Ttext 0x40008000
+
+shell: $(ULIB_OBJ) $(CLIB_OBJ)
+	mkdir -p out/user
+	$(CC) -c user/shell_entry.s -o out/user/shell_entry.o
+	$(CC) -c user/shell.cpp $(USER_CFLAGS) -o out/user/shell.o
+	$(LD) out/user/shell_entry.o out/user/shell.o $^ -o out/user/shell -e entry -Ttext 0x40008000
