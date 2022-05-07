@@ -4,6 +4,7 @@
 #include <kernel/user_process.h>
 #include <kernel/simfs.h>
 #include <kernel/ide.h>
+#include <kernel/loader.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +48,7 @@ int cmdReadSector(char* args[]);
 int cmdWriteSector(char* args[]);
 int cmdLs(char* args[]);
 int cmdCat(char* args[]);
+int cmdLaunch(char* args[]);
 
 struct KernelCmd {
   const char* cmdName;
@@ -70,6 +72,7 @@ struct KernelCmd {
   // executable.
   { "ls", "List the directory", cmdLs},
   { "cat", "Show the file content", cmdCat},
+  { "launch", "Lauch a user process from the program in the file system", cmdLaunch},
   {nullptr, nullptr},
 };
 
@@ -202,6 +205,14 @@ int cmdCat(char *args[]) {
     return -1;
   }
   return cat(args[0]);
+}
+
+int cmdLaunch(char *args[]) {
+  if (!args[0]) {
+    printf("Missing path to the program\n");
+    return -1;
+  }
+  return launch(args[0]);
 }
 
 char* parseCmdLine(char* line, char *args[]) {

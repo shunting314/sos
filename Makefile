@@ -81,6 +81,8 @@ run-graph: out/kernel.img fs.img
 fsimg fs.img:
 	mkdir -p out/fs_template
 	echo "Hello, simfs!" > out/fs_template/message
+	$(MAKE) one # don't put one as a prerequisite on purpose so fs.img does not get overriden whenever one needs to be rebuilt
+	cp out/user/one out/fs_template
 	python3.6 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:
@@ -95,3 +97,9 @@ bootloader_helloworld:
 	qemu-system-x86_64 -hda out/boot/hello.bl
 
 -include $(ALL_DEPS)
+
+# user application
+one:
+	mkdir -p out/user
+	$(CC) -c user/one.s -o out/user/one.o
+	$(LD) out/user/one.o -o out/user/one -e entry -Ttext 0x40008000

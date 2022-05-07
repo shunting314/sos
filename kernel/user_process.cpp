@@ -49,7 +49,6 @@ UserProcess* UserProcess::create(uint8_t* code, uint32_t len) {
   uint32_t pgdir = alloc_phys_page();
   proc->pgdir_ = pgdir;
   memmove((void*) pgdir, (void*) kernel_page_dir, 4096);
-  uint32_t pgcode = alloc_phys_page();
   // user read/write
   map_region_alloc(pgdir, user_stack_start, 4096 * 7, MAP_FLAG_USER | MAP_FLAG_WRITE); // stack
   map_region_alloc(pgdir, user_process_va_start, len, MAP_FLAG_USER | MAP_FLAG_WRITE);
