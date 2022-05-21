@@ -63,7 +63,7 @@ out/%.o: %.s
 out/kernel/kernel: kernel/kernel.ld $(KERNEL_OBJ) $(CLIB_OBJ)
 	mkdir -p $(dir $@)
 	$(LD) $(KERNEL_OBJ) $(CLIB_OBJ) -T kernel/kernel.ld -o $@
-	$(OBJDUMP) -d $@ > out/kernel/kernel.asm
+	$(OBJDUMP) -dC $@ > out/kernel/kernel.asm
 
 out/boot/bootloader.bl: out/boot/bootloader.o out/boot/load_kernel_and_enter.o
 	mkdir -p $(dir $@)

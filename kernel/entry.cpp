@@ -1,3 +1,9 @@
+/*
+ * There is no significant reason why put this in a C++ file rather than an asm file.
+ * I mainly want to show that basic inline assembly is quite powerful. We can embed
+ * a large chunk of non-trivial assembly code into a C++ file.
+ */
+asm(R"(
 .global entry
 entry:
   cli
@@ -56,3 +62,4 @@ kernel_stack_top:
 .global kernel_page_dir
 kernel_page_dir:
   .space 4096
+)");
