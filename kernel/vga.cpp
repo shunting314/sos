@@ -1,3 +1,5 @@
+#include <kernel/vga.h>
+#include <kernel/ioport.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +18,20 @@ void vga_set_char(int r, int c, int ch) {
 }
 
 int _cursor_loc = 0;
+
+void place_cursor() {
+  /*
+   * Code adapted from the examples on https://wiki.osdev.org/Text_Mode_Cursor#Moving_the_Cursor
+   */
+  assert((unsigned) _cursor_loc < NROW * NCOL);
+  Port8Bit p0(0x3D4);
+  Port8Bit p1(0x3D5);
+
+  p0.write(0x0F);
+  p1.write(_cursor_loc & 0xFF);
+  p0.write(0x0E);
+  p1.write((_cursor_loc >> 8) & 0xFF);
+}
 
 void vga_putchar(char ch) {
   if (ch == '\r') {
@@ -44,6 +60,10 @@ void vga_putchar(char ch) {
     }
     _cursor_loc -= NCOL;
   }
+
+  // TODO: we don't need to move the cursor for every charactor. Just do that
+  // for the last character should be much more efficient.
+  place_cursor();
 }
 
 void vga_clear() {

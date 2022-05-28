@@ -12,6 +12,7 @@ void vga_putchar(char ch);
 // simple animate in text mode
 void show_flashing_digits();
 void show_running_curve();
+void place_cursor();
 
 #ifdef __cplusplus
 }
