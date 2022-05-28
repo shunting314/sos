@@ -46,6 +46,8 @@ void map_page(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, int ma
 
   phys_addr_t page_tbl = (ppde->phys_page_no << 12);
   paging_entry_t* ppte = GET_PTE_PTR(page_tbl, la_start);
+
+  assert(!ppte->present && "page already mapped. Unmap first");
  
   ppte->present = 1;
   if (map_flags & MAP_FLAG_WRITE) {

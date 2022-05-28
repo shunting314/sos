@@ -121,10 +121,9 @@ bootloader_helloworld:
 one:
 	mkdir -p out/user
 	$(CC) -c user/one.s -o out/user/one.o
-	$(LD) out/user/one.o -o out/user/one -e entry -Ttext 0x40008000
+	$(LD) out/user/one.o -o out/user/one -e entry -Tulib/user.ld
 
 shell: $(ULIB_OBJ) $(CLIB_OBJ)
 	mkdir -p out/user
-	$(CC) -c user/shell_entry.s -o out/user/shell_entry.o
 	$(CC) -c user/shell.cpp $(USER_CFLAGS) -o out/user/shell.o
-	$(LD) out/user/shell_entry.o out/user/shell.o $^ -o out/user/shell -e entry -Ttext 0x40008000
+	$(LD) out/user/shell.o $^ -o out/user/shell -e entry -Tulib/user.ld

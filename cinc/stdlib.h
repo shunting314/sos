@@ -45,4 +45,6 @@ static inline int atoi(const char* s) {
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
+#define ROUND_UP(s, base) ((s + base - 1) / base * base)
+
 #endif

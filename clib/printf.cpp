@@ -43,6 +43,10 @@ int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn) {
         percent_mode = 0;
         goto next;
       }
+      case 'p':
+        putchar_fn('0');
+        putchar_fn('x');
+        // fall thru
       case 'x': {
         int num = va_arg(va, int);
         printnum(num, 16, putchar_fn);
