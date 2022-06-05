@@ -2,6 +2,7 @@
 #define ASSERT_H
 
 #include <stdio.h>
+#include <stdint.h>
 
 // an indirection is needed so __LINE__ is evaled before being concatenated.
 #define _CONCAT(a, b) a##b

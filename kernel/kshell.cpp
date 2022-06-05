@@ -5,6 +5,7 @@
 #include <kernel/simfs.h>
 #include <kernel/ide.h>
 #include <kernel/loader.h>
+#include <kernel/pci.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,6 +50,7 @@ int cmdWriteSector(char* args[]);
 int cmdLs(char* args[]);
 int cmdCat(char* args[]);
 int cmdLaunch(char* args[]);
+int cmdLspci(char *args[]);
 
 struct KernelCmd {
   const char* cmdName;
@@ -73,6 +75,7 @@ struct KernelCmd {
   { "ls", "List the directory", cmdLs},
   { "cat", "Show the file content", cmdCat},
   { "launch", "Lauch a user process from the program in the file system", cmdLaunch},
+  { "lspci", "Enumerate PCI devices.", cmdLspci},
   {nullptr, nullptr},
 };
 
@@ -213,6 +216,11 @@ int cmdLaunch(char *args[]) {
     return -1;
   }
   return launch(args[0]);
+}
+
+int cmdLspci(char *args[]) {
+  lspci();
+  return 0;
 }
 
 char* parseCmdLine(char* line, char *args[]) {
