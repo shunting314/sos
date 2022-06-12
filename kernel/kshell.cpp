@@ -6,6 +6,7 @@
 #include <kernel/ide.h>
 #include <kernel/loader.h>
 #include <kernel/pci.h>
+#include <kernel/phys_page.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,6 +52,7 @@ int cmdLs(char* args[]);
 int cmdCat(char* args[]);
 int cmdLaunch(char* args[]);
 int cmdLspci(char *args[]);
+int cmdCheckPhysMem(char *args[]);
 
 struct KernelCmd {
   const char* cmdName;
@@ -76,6 +78,7 @@ struct KernelCmd {
   { "cat", "Show the file content", cmdCat},
   { "launch", "Lauch a user process from the program in the file system", cmdLaunch},
   { "lspci", "Enumerate PCI devices.", cmdLspci},
+  { "check_phys_mem", "Check the amount of available physical pages.", cmdCheckPhysMem},
   {nullptr, nullptr},
 };
 
@@ -223,6 +226,11 @@ int cmdLspci(char *args[]) {
   return 0;
 }
 
+int cmdCheckPhysMem(char *args[]) {
+  printf("Number of available physical pages %d\n", num_avail_phys_pages());
+  return 0;
+}
+
 char* parseCmdLine(char* line, char *args[]) {
   char* cmd = nullptr;
   int argIdx = 0;
@@ -258,6 +266,13 @@ char* parseCmdLine(char* line, char *args[]) {
 }
 
 void kshell() {
+  // enable the interrupt here. It's mainly needed when we enter kshell after
+  // terminating the last process. In that case, the user process enters kernel
+  // by call the exit syscall. Since we use interrupt gate, interrupt is disabled
+  // once we enter kernel.
+  // We should reenable interrupt so kshell get keyboard inputs.
+  asm("sti");
+
   char line[1024];
   char* args[128]; // add a nullptr after the last argument
   while (1) {

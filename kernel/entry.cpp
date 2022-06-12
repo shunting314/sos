@@ -13,12 +13,12 @@ entry:
   jmp $CODE_SEG, $reset_cs
 reset_cs:
   mov $DATA_SEG, %ax
-  call kernel_main
   mov %ax, %ds
   mov %ax, %es
   mov %ax, %fs
   mov %ax, %gs
   mov %ax, %ss
+  call kernel_main
 1:
   jmp 1b
 

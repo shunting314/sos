@@ -20,6 +20,7 @@ static_assert(sizeof(paging_entry_t) == 4);
 #define CR0_WP (1UL << 16)
 #define PAGE_OFF_MASK 0xFFF
 #define PAGE_SIZE 4096
+#define PAGING_ENTRIES_PER_PAGE ((PAGE_SIZE) / sizeof(paging_entry_t))
 
 #define PDIDX(la) ((la >> 22) & 0x3FF)
 #define PTIDX(la) ((la >> 12) & 0x3FF)
@@ -100,4 +101,34 @@ void setup_paging() {
   asm_set_cr3((uint32_t)kernel_page_dir);
   asm_cr0_enable_flags(CR0_PG | CR0_WP);
   printf("Paging enabled.\n");
+}
+
+/*
+ * Release the page dir and associated page table/frames for a user app.
+ *
+ * Setup identity map in setup_paging() for physical memory greatly ease the work to release a page
+ * dir, all page tables used and all page frames. We can access the page dir
+ * and page table directly via the physical addresses!
+ *
+ * NOTE: app page directory is a super set of kernel page directory. When freeing
+ * paging structures, we should skip those for kernel. We do the filtering using
+ * paging_entry.u_s flag.
+ */
+void release_pgdir(phys_addr_t pgdir) {
+  auto pde_list = (paging_entry*) pgdir;
+  for (int i = 0; i < PAGING_ENTRIES_PER_PAGE; ++i) {
+    if (pde_list[i].present && pde_list[i].u_s) {
+      auto pte_list = (paging_entry*) (pde_list[i].phys_page_no << 12);
+      for (int j = 0; j < PAGING_ENTRIES_PER_PAGE; ++j) {
+        if (pte_list[j].present && pte_list[j].u_s) {
+          // release the page frame
+          free_phys_page(pte_list[j].phys_page_no << 12);
+        }
+      }
+      // release the page table
+      free_phys_page(pde_list[i].phys_page_no << 12);
+    }
+  }
+  // release page directory
+  free_phys_page(pgdir);
 }

@@ -10,9 +10,7 @@ entry:
   add $4, %esp
 
   call main
-  # TODO we should call some syscall to exit the process
-1:
-  jmp 1b
+  call exit
 )");
 
 /*

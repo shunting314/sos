@@ -2,6 +2,7 @@
 #include <kernel/phys_page.h>
 #include <kernel/paging.h>
 #include <kernel/asm_util.h>
+#include <kernel/kshell.h>
 #include <kernel/idt.h>
 #include <assert.h>
 #include <string.h>
@@ -16,6 +17,14 @@ uint32_t user_process_va_start = 0x40008000;
 UserProcess g_process_list[N_PROCESS];
 
 UserProcess* UserProcess::current_ = nullptr;
+
+UserProcess* UserProcess::current() {
+  return current_;
+}
+
+void UserProcess::set_current(UserProcess* cur) {
+  current_ = cur;
+}
 
 void UserProcess::set_frame_for_current(InterruptFrame* framePtr) {
   // UserProcess::current_ can be nullptr if interrupt happens in kernel
@@ -66,12 +75,17 @@ UserProcess* UserProcess::create(uint8_t* code, uint32_t len) {
   return proc;
 }
 
-void UserProcess::sched() {
+void UserProcess::sched(UserProcess* cur) {
+  if (!cur) {
+    cur = UserProcess::current_;
+  } else {
+    assert(!UserProcess::current_ && "We are terminating the current process and UserProcess::current_ should be nullptr");
+  }
   // don't do anything if there is no current process
-  if (!UserProcess::current_) {
+  if (!cur) {
     return;
   }
-  int start_idx = (UserProcess*) UserProcess::current_ - &g_process_list[0];
+  int start_idx = (UserProcess*) cur - &g_process_list[0];
   int curr_idx = start_idx;
   for (int i = 0; i < N_PROCESS; ++i) {
     curr_idx = (curr_idx + 1) % N_PROCESS;
@@ -80,7 +94,7 @@ void UserProcess::sched() {
       next_proc->resume();
     }
   }
-  // TODO: we should either always have an idle process or fall
-  // to the kernel shell
-  assert(false && "No active processes");
+
+  // no active processes any more, run kshell
+  kshell();
 }
