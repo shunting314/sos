@@ -16,8 +16,27 @@
 #define CONFIG_OFF_CLASS_CODE 0xB // 1 byte size
 #define CONFIG_OFF_SUBCLASS_CODE 0xA // 1 byte size
 #define CONFIG_OFF_HEADER_TYPE 0xE // 1 byte size
+#define CONFIG_OFF_BAR0 0x10 // 4 byte size
+#define CONFIG_OFF_BAR1 0x14 // 4 byte size
+#define CONFIG_OFF_BAR2 0x18 // 4 byte size
+#define CONFIG_OFF_BAR3 0x1C // 4 byte size
+#define CONFIG_OFF_BAR4 0x20 // 4 byte size
+#define CONFIG_OFF_BAR5 0x14 // 4 byte size
+#define CONFIG_MAX_NUM_BARS 6
 
+#define IOBAR_INFO_BITS_MASK 0x3
+#define MEMBAR_INFO_BITS_MASK 0xF
+
+/*
+ * Visit all available pci devices and print each's metadata.
+ */
 void lspci();
+
+/*
+ * Visit all available pci devices and record the PCIFunction for the
+ * interested ones.
+ */
+void collect_pci_devices();
 
 static inline const char* get_vendor_desc(uint16_t vendor_id) {
   switch (vendor_id) {
@@ -34,6 +53,15 @@ static inline const char* get_vendor_desc(uint16_t vendor_id) {
   return "unknown vendor";
 }
 
+enum class FullClassCode {
+  IDE_CONTROLLER = 0x0101,
+  ETHERNET_CONTROLLER = 0x0200,
+  VGA_COMPATIBLE_CONTROLLER = 0x0300,
+  HOST_BRIDGE = 0x0600,
+  ISA_BRIDGE = 0x0601,
+  OTHER_BRIDGE = 0x0680,
+};
+
 /*
  * Class code is vendor independent. But the interpretation of subclass code
  * depends on class code.
@@ -42,22 +70,22 @@ static inline const char* get_vendor_desc(uint16_t vendor_id) {
  * Check pci osdev wiki for interpretations of class code.
  */
 static inline const char* get_class_desc(uint16_t full_class_code) {
-  switch (full_class_code) {
+  switch ((FullClassCode) full_class_code) {
       // class 0x01: Mass Storge Controller
-    case 0x0101:
+    case FullClassCode::IDE_CONTROLLER:
       return "IDE Controller";
       // class 0x02: Network Controller
-    case 0x0200:
+    case FullClassCode::ETHERNET_CONTROLLER:
       return "Ethernet Controller";
       // class 0x03: Display Controller
-    case 0x0300:
+    case FullClassCode::VGA_COMPATIBLE_CONTROLLER:
       return "VGA Compatible Controller";
       // class 0x06: Bridge
-    case 0x0600:
+    case FullClassCode::HOST_BRIDGE:
       return "Host Bridge";
-    case 0x0601:
+    case FullClassCode::ISA_BRIDGE:
       return "ISA Bridge";
-    case 0x0680:
+    case FullClassCode::OTHER_BRIDGE:
       return "Other Bridge";
     default:
       break;
@@ -65,35 +93,70 @@ static inline const char* get_class_desc(uint16_t full_class_code) {
   return "unknown class";
 }
 
+// base address register
+class Bar {
+ public:
+  operator bool() const {
+    // raw == 0 indicas a non-exist BAR
+    return idx_ >= 0 && raw_ != 0;
+  }
+
+  void print() const {
+    printf("idx %d, addr 0x%x, size %d (0x%x), is_mem %d, raw 0x%x\n", idx_, addr_, size_, size_, is_mem_, raw_);
+  }
+
+  void set_idx(int idx) { idx_ = idx; }
+  int get_idx() const { return idx_; }
+
+  void set_raw(uint32_t raw) {
+    raw_ = raw;
+    is_mem_ = (raw & 1) == 0;
+    addr_ = clear_info_bits(raw);
+  }
+  uint32_t get_raw() const { return raw_; }
+  uint32_t get_addr() const { return addr_; }
+
+  // need clear the information bits in raw_size and then negate
+  void set_size(uint32_t raw_size) {
+    size_ = -clear_info_bits(raw_size);
+  }
+ private:
+  uint32_t clear_info_bits(uint32_t raw) {
+    if (is_mem_) {
+      return raw & ~MEMBAR_INFO_BITS_MASK;
+    } else {
+      return raw & ~IOBAR_INFO_BITS_MASK;
+    }
+  }
+
+  int idx_ = -1; // indicate an uninitialized state
+  uint32_t size_ = 0;
+  bool is_mem_ = 0; // mem or IO
+  uint32_t raw_ = 0; // raw content containing start address and information bits
+  uint32_t addr_ = 0;
+};
+
 class PCIFunction {
  public:
-  explicit PCIFunction(uint32_t bus_id, uint32_t dev_id, uint32_t func_id) : bus_id_(bus_id), dev_id_(dev_id), func_id_(func_id) {
+  explicit PCIFunction(uint32_t bus_id=0xFFFF, uint32_t dev_id=0, uint32_t func_id=0) : bus_id_(bus_id), dev_id_(dev_id), func_id_(func_id) {
   }
 
   // return true iff the function exists
   operator bool() const {
-    return vendor_id() != 0xFFFF;
+    return bus_id_ != 0xFFFF && vendor_id() != 0xFFFF;
   }
 
   /* dump vendor_id, device_id, class_code and subclass_code.
    * Since device_id is vendor specific, this method does not bother to interpret it.
    */
-  void dump() const {
-    printf("%d:%d.%d", bus_id_, dev_id_, func_id_);
+  void dump() const;
 
-    auto _vendor_id = vendor_id();
-    printf(" [vendor] %s (0x%x)", get_vendor_desc(_vendor_id), _vendor_id);
-
-    // device_id
-    auto _device_id = device_id();
-    printf(" [device] (0x%x)", _device_id);
-
-    // class & subclass code
+  Bar getBar(int idx) const;
+  // return a 2 bytes word whose MSB is the class code and LSB is the subclass code.
+  uint16_t full_class_code() const {
     auto _class_code = class_code();
     auto _subclass_code = subclass_code();
-    auto full_class_code = ((uint16_t) _class_code << 8) | _subclass_code;
-    printf("\n  [class] %s (0x%x)", get_class_desc(full_class_code), full_class_code);
-    printf("\n");
+    return ((uint16_t) _class_code << 8) | _subclass_code;
   }
  public:
   /* APIs handling configuration space */
@@ -116,10 +179,42 @@ class PCIFunction {
   uint8_t subclass_code() const {
     return read_config<uint8_t>(CONFIG_OFF_SUBCLASS_CODE);
   }
+
+  uint32_t bar(uint8_t idx) const {
+    // TODO pci-to-pci bridge device has less BARs
+    assert(idx < 6);
+    return read_config<uint32_t>(CONFIG_OFF_BAR0 + idx * 4);
+  }
+
+  void set_bar(uint8_t idx, uint32_t new_bar) const {
+    // TODO pci-to-pci bridge device has less BARs
+    assert(idx < 6);
+    write_config<uint32_t>(CONFIG_OFF_BAR0 + idx * 4, new_bar);
+  }
+
  private:
   // the highest byte of the config address should be 0x80
   uint32_t get_config_address(uint8_t offset) const {
     return (0x80 << 24) | (bus_id_ << 16) | (dev_id_ << 11) | (func_id_ << 8) | offset;
+  }
+
+  template <typename T>
+  void write_config(uint8_t offset, uint32_t newval) const {
+    uint32_t item_size = sizeof(T);
+    assert((offset % sizeof(T) == 0) && "unaligned offset");
+    assert(item_size > 0 && item_size <= 4);
+    assert(((item_size & (item_size - 1)) == 0) && "size should be a power of 2");
+    auto addr = get_config_address(offset);
+
+    // TODO make these 2 ports global variables
+    Port32Bit addr_port(PORT_CONFIG_ADDRESS);
+    Port32Bit data_port(PORT_CONFIG_DATA);
+
+    // make the lowest 2 bits
+    addr_port.write(addr & ~0x3);
+
+    assert(item_size == 4 && "We need read the dword first in order to write a partial dword");
+    data_port.write(newval);
   }
 
   template <typename T>

@@ -14,7 +14,7 @@ ULIB_SRC_S := $(wildcard ulib/*.s)
 ULIB_OBJ := $(patsubst %.cpp,%.o,$(ULIB_SRC_CPP)) $(patsubst %.s,%.o,$(ULIB_SRC_S))
 ULIB_OBJ := $(addprefix out/,$(ULIB_OBJ)) # add out/ prefix
 
-KERNEL_SRC_CPP := $(wildcard kernel/*.cpp)
+KERNEL_SRC_CPP := $(wildcard kernel/*.cpp) $(wildcard kernel/nic/*.cpp)
 KERNEL_SRC_C := $(wildcard kernel/*.c)
 KERNEL_SRC_S := $(wildcard kernel/*.s) $(wildcard kernel/*.S)
 KERNEL_OBJ := $(patsubst %.cpp,%.o,$(KERNEL_SRC_CPP)) $(patsubst %.c,%.o,$(KERNEL_SRC_C)) $(patsubst %.s,%.o,$(KERNEL_SRC_S))
@@ -83,8 +83,10 @@ run: out/kernel.img fs.img
 	# Using -nographic option does not show content written to the vga memory.
 	# Use -curses works. Check https://stackoverflow.com/questions/6710555/how-to-use-qemu-to-run-a-non-gui-os-on-the-terminal for details.
 	# simulate 10M memory
+	#
 	# '-serial stdio' is added so the final content on the screen in the guest OS is available in the host terminal after terminating qemu.
-	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown -serial stdio $(QEMU_EXTRA)
+	#   One flaw: after adding this option, the first keyboard input is somehow lost.
+	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
 
 # start a connection to qemu monitor
 mon:

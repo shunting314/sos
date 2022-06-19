@@ -5,6 +5,8 @@
 #include <kernel/tss.h>
 #include <kernel/kshell.h>
 #include <kernel/simfs.h>
+#include <kernel/pci.h>
+#include <kernel/nic/nic.h>
 #include <stdio.h>
 
 extern "C" void kernel_main() {
@@ -17,5 +19,8 @@ extern "C" void kernel_main() {
   setup_tss();
   SimFs::get().init();
 
+  lspci();
+  collect_pci_devices();
+  nic_init();
   kshell();
 }

@@ -1,23 +1,28 @@
 #include <stdarg.h>
+#include <stdint.h>
 
 typedef void putchar_fn_t(char ch);
 
-void printnum(int num, int base, putchar_fn_t* putchar_fn) {
+void printnum_unsigned(uint32_t num, int base, putchar_fn_t* putchar_fn) {
   static char digits[] = "0123456789abcdef";
-  // handle negative number
-  if (num < 0) {
-    putchar_fn('-');
-    printnum(-num, base, putchar_fn);
-    return;
-  }
   // handle single digit
   if (num >= 0 && num < base) {
     putchar_fn(digits[num]);
     return;
   }
   // handle multi digit
-  printnum(num / base, base, putchar_fn);
+  printnum_unsigned(num / base, base, putchar_fn);
   putchar_fn(digits[num % base]);
+}
+
+void printnum(uint32_t num, int base, putchar_fn_t* putchar_fn) {
+   // handle negative number
+  if (num < 0) {
+    putchar_fn('-');
+    printnum_unsigned(-num, base, putchar_fn);
+  } else {
+    printnum_unsigned(num, base, putchar_fn);
+  }
 }
 
 // internal implementation of vprintf
@@ -48,8 +53,8 @@ int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn) {
         putchar_fn('x');
         // fall thru
       case 'x': {
-        int num = va_arg(va, int);
-        printnum(num, 16, putchar_fn);
+        unsigned int num = va_arg(va, unsigned int);
+        printnum_unsigned(num, 16, putchar_fn);
         percent_mode = 0;
         goto next;
       }
