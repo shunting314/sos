@@ -36,7 +36,7 @@ REGStruct uint32ToRegStruct(uint32_t val) {
 
 class NICDriver_82540EM : public NICDriver {
  public:
-  explicit NICDriver_82540EM(const PCIFunction& pci_func = PCIFunction()) : NICDriver(pci_func) { init(); }
+  explicit NICDriver_82540EM(const PCIFunction& pci_func = PCIFunction()) : NICDriver(pci_func) { if (pci_func) { init(); } }
  private:
   void init();
 

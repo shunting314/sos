@@ -7,10 +7,12 @@
 #include <kernel/simfs.h>
 #include <kernel/pci.h>
 #include <kernel/nic/nic.h>
+#include <kernel/init.h>
 #include <stdio.h>
 
 extern "C" void kernel_main() {
   vga_clear();
+  kernel_elf_init();
   puts("Hello, World!");
   setup_idt();
 

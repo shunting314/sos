@@ -1,6 +1,9 @@
 #include <kernel/pci.h>
 #include <kernel/nic/nic.h>
 
+Port32Bit pci_addr_port(PORT_CONFIG_ADDRESS);
+Port32Bit pci_data_port(PORT_CONFIG_DATA);
+
 typedef void visit_fn(const PCIFunction& func);
 
 /*

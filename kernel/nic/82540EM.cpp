@@ -7,6 +7,7 @@
  * is the memory register, BAR 2 (if exist) is the IO register.
  */
 void NICDriver_82540EM::init() {
+  assert(pci_func_);
   Bar membar = pci_func_.getBar(0);
   Bar iobar = pci_func_.getBar(2);
 

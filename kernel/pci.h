@@ -5,6 +5,8 @@
 
 #define PORT_CONFIG_ADDRESS 0xCF8
 #define PORT_CONFIG_DATA 0xCFC
+extern Port32Bit pci_addr_port;
+extern Port32Bit pci_data_port;
 
 #define MAX_NUM_BUS 256 // max number of pci buses
 #define MAX_NUM_DEVICES_PER_BUS 32 // max number of devices per bus
@@ -206,15 +208,11 @@ class PCIFunction {
     assert(((item_size & (item_size - 1)) == 0) && "size should be a power of 2");
     auto addr = get_config_address(offset);
 
-    // TODO make these 2 ports global variables
-    Port32Bit addr_port(PORT_CONFIG_ADDRESS);
-    Port32Bit data_port(PORT_CONFIG_DATA);
-
     // make the lowest 2 bits
-    addr_port.write(addr & ~0x3);
+    pci_addr_port.write(addr & ~0x3);
 
     assert(item_size == 4 && "We need read the dword first in order to write a partial dword");
-    data_port.write(newval);
+    pci_data_port.write(newval);
   }
 
   template <typename T>
@@ -225,14 +223,10 @@ class PCIFunction {
     assert(((return_size & (return_size - 1)) == 0) && "size should be a power of 2");
     auto addr = get_config_address(offset);
 
-    // TODO make these 2 ports global variables
-    Port32Bit addr_port(PORT_CONFIG_ADDRESS);
-    Port32Bit data_port(PORT_CONFIG_DATA);
-
     // make the lowest 2 bits
-    addr_port.write(addr & ~0x3);
+    pci_addr_port.write(addr & ~0x3);
     // TODO: PCI use little endian. Need do byte swapping for big endian processors
-    uint32_t data = data_port.read();
+    uint32_t data = pci_data_port.read();
     if (sizeof(T) != sizeof(uint32_t)) {
       data = (data >> ((offset & 0x3) * 8)) & ((1 << (return_size * 8)) - 1);
     }

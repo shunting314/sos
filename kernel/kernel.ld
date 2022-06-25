@@ -6,6 +6,10 @@ SECTIONS {
   .text : {
     *(.text);
   }
+  .init_array : {
+    /* refer to ld's default script obtained by running 'ld --verbose' */
+    *(.init_array .ctors)
+  }
   .data : {
     *(.data);
   }

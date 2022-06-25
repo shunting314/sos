@@ -1,6 +1,8 @@
 #ifndef INC_ELF_H
 #define INC_ELF_H
 
+#include <stdint.h>
+
 /* ELF data structures are copied from glibc elf/elf.h */
 
 /* Type for a 16-bit quantity.  */
