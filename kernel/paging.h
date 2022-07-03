@@ -12,6 +12,7 @@ extern char kernel_page_dir[];
 
 void setup_paging();
 void release_pgdir(phys_addr_t pgdir);
+phys_addr_t clone_address_space(phys_addr_t parent_pgdir);
 void map_region_alloc(phys_addr_t page_dir, uint32_t la_start, uint32_t size, int map_flags);
 void map_region(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, uint32_t size, int map_flags);
 

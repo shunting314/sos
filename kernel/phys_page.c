@@ -22,8 +22,8 @@ void free_phys_page(phys_addr_t phys_addr) {
   free_list_hdr = ppg;
 }
 
-uint32_t alloc_phys_page() {
-  assert(free_list_hdr != NULL);
+phys_addr_t alloc_phys_page() {
+  assert(free_list_hdr != NULL && "OOM!");
   struct physical_page* ppg = free_list_hdr;
   free_list_hdr = free_list_hdr->next;
 #ifdef DEBUG_PHYS_PAGE

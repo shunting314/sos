@@ -132,3 +132,34 @@ void release_pgdir(phys_addr_t pgdir) {
   // release page directory
   free_phys_page(pgdir);
 }
+
+// TODO implement COW
+phys_addr_t clone_address_space(phys_addr_t parent_pgdir) {
+  auto child_pgdir = alloc_phys_page();
+  memmove((void*) child_pgdir, (void*) kernel_page_dir, 4096);
+
+  // clone address space. Note handle kernel mapping properly
+  auto parent_pde_list = (paging_entry*) parent_pgdir;
+  auto child_pde_list = (paging_entry*) child_pgdir;
+  for (int i = 0; i < PAGING_ENTRIES_PER_PAGE; ++i) {
+    if (parent_pde_list[i].present && parent_pde_list[i].u_s) {
+      auto new_pgtbl = alloc_phys_page();
+      memset((void*) new_pgtbl, 0, 4096);
+      child_pde_list[i] = parent_pde_list[i];
+      child_pde_list[i].phys_page_no = (new_pgtbl >> 12);
+
+      auto parent_pte_list = (paging_entry*) (parent_pde_list[i].phys_page_no << 12);
+      auto child_pte_list = (paging_entry*) (child_pde_list[i].phys_page_no << 12);
+      for (int j = 0; j < PAGING_ENTRIES_PER_PAGE; ++j) {
+        if (parent_pte_list[j].present && parent_pte_list[j].u_s) {
+          auto new_pgframe = alloc_phys_page();
+          memmove((void*) new_pgframe, (void*) (parent_pte_list[j].phys_page_no << 12), 4096);
+          child_pte_list[j] = parent_pte_list[j];
+          child_pte_list[j].phys_page_no = (new_pgframe >> 12);
+        }
+      }
+    }
+  }
+
+  return child_pgdir;
+}

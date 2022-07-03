@@ -35,6 +35,11 @@ USER_CFLAGS := $(CFLAGS) -Iuinc
 # set run as the default rule
 run:
 
+# run with a fresh fs image
+clean-run:
+	rm -f fs.img
+	$(MAKE) run
+
 out/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@

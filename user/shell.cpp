@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <syscall.h>
 
 class RAIICls {
  public:
@@ -29,6 +30,18 @@ int main(void) {
     sum += i;
   }
   printf("sum from 1 to 100 is %d\n", sum);
+  int r = dumbfork();
+  if (r < 0) {
+    printf("Fail to fork, return %d\n", r);
+  } else if (r == 0) { // child process
+    for (int i = 0; i < 5; ++i) {
+      printf("Message from child process %d [current pid is %d]\n", i, getpid());
+    }
+  } else {
+    for (int i = 0; i < 5; ++i) {
+      printf("Message from parent process %d [r=%d]\n", i, r);
+    }
+  }
   printf("bye\n");
   return 0;
 }

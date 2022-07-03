@@ -32,3 +32,11 @@ int write(int fd, char* buf, int sz) {
 int exit() {
   return syscall(SC_EXIT, PHARG, PHARG, PHARG, PHARG, PHARG);
 }
+
+int dumbfork() {
+  return syscall(SC_DUMBFORK, PHARG, PHARG, PHARG, PHARG, PHARG);
+}
+
+int getpid() {
+  return syscall(SC_GETPID, PHARG, PHARG, PHARG, PHARG, PHARG);
+}

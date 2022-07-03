@@ -28,6 +28,9 @@ class UserProcess {
    */
   static void sched(UserProcess* cur = nullptr);
   static void set_frame_for_current(InterruptFrame* framePtr);
+
+  int get_pid();
+  UserProcess* clone();
  private:
   static UserProcess* allocate();
   static UserProcess* current_;

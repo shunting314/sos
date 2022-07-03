@@ -18,6 +18,10 @@ UserProcess g_process_list[N_PROCESS];
 
 UserProcess* UserProcess::current_ = nullptr;
 
+int UserProcess::get_pid() {
+  return this - g_process_list;
+}
+
 UserProcess* UserProcess::current() {
   return current_;
 }
@@ -41,7 +45,9 @@ void UserProcess::resume() {
 }
 
 UserProcess* UserProcess::allocate() {
-  for (int i = 0; i < N_PROCESS; ++i) {
+  // let's skip process 0 for now so process id start from 1
+  // this is to make sure the child process id is non-zero for fork.
+  for (int i = /* 0 */ 1; i < N_PROCESS; ++i) {
     if (!g_process_list[i].allocated_) {
       g_process_list[i].allocated_ = true;
       return &g_process_list[i];
