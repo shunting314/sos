@@ -1,5 +1,7 @@
 #include <kernel/init.h>
+#include <kernel/ide.h>
 #include <elf.h>
+#include <stdlib.h>
 
 typedef void init_fn_t(void);
 class RAIICls {
@@ -14,11 +16,30 @@ class RAIICls {
 RAIICls first_message("first message");
 RAIICls second_message("second message");
 
-void kernel_elf_init() {
-  void* elf_cont = (void *) 0x10000;
-  Elf32_Ehdr *ehdr = (Elf32_Ehdr *) elf_cont;
+#define FIRST_KERNEL_SECTOR 1
 
-  Elf32_Shdr* shdrtable = (Elf32_Shdr*) (elf_cont + ehdr->e_shoff);
+// the returned ptr may not be the beginning of the buffer since the file offset
+// may not sit at the sector boundary
+void *load_from_disk(char *buf, int bufsize, int file_off, int nbytes_needed) {
+  int remainder = file_off % SECTOR_SIZE;
+  file_off -= remainder;
+  nbytes_needed = ROUND_UP(nbytes_needed + remainder, SECTOR_SIZE);
+  assert(nbytes_needed <= bufsize);
+
+  auto dev = createMasterIDE();
+  dev.read((uint8_t*) buf, file_off / SECTOR_SIZE + FIRST_KERNEL_SECTOR, nbytes_needed / SECTOR_SIZE);
+  return buf + remainder;
+}
+
+void kernel_elf_init() {
+  char buf_ehdr[512]; // one sector is enough
+  char buf_shdrtable[4096];
+  char buf_init_fn_table[4096];
+
+  Elf32_Ehdr* ehdr = (Elf32_Ehdr*) load_from_disk(buf_ehdr, sizeof(buf_ehdr), 0, sizeof(Elf32_Ehdr));
+
+  Elf32_Shdr* shdrtable = (Elf32_Shdr*) load_from_disk(buf_shdrtable, sizeof(buf_shdrtable), ehdr->e_shoff, ehdr->e_shnum * sizeof(Elf32_Shdr));
+
   for (Elf32_Shdr* shdr = shdrtable; shdr != shdrtable + ehdr->e_shnum; ++shdr) {
     switch (shdr->sh_type) {
     case SHT_INIT_ARRAY: {
@@ -32,7 +53,7 @@ void kernel_elf_init() {
       }
 
       int fn_table_size = shdr->sh_size / 4;
-      init_fn_t** elf_init_fn_table = (init_fn_t**) (elf_cont + shdr->sh_offset);
+      init_fn_t** elf_init_fn_table = (init_fn_t**) load_from_disk(buf_init_fn_table, sizeof(buf_init_fn_table), shdr->sh_offset, shdr->sh_size);
       for (int i = 0; i < fn_table_size; ++i) {
         elf_init_fn_table[i]();
       }

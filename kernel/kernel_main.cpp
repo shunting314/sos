@@ -10,6 +10,10 @@
 #include <kernel/init.h>
 #include <stdio.h>
 
+#ifdef TEST_LARGE_KERNEL
+char buf[65546] = {1};
+#endif
+
 extern "C" void kernel_main() {
   vga_clear();
   kernel_elf_init();

@@ -11,7 +11,8 @@ class Port8Bit {
 
   uint8_t read() {
     uint8_t ret;
-    asm(
+    // add volatile so compiler does not move the input instruction out of a loop
+    asm volatile (
         "inb %1, %0" : "=a"(ret) : "d"(port_) /* port should go to edx */:
     );
     return ret;
@@ -32,7 +33,8 @@ class Port16Bit {
 
   uint16_t read() {
     uint16_t ret;
-    asm(
+    // add volatile so compiler does not move the input instruction out of a loop
+    asm volatile(
         "inw %1, %0" : "=a"(ret) : "d"(port_) /* port should go to edx */:
     );
     return ret;
@@ -57,7 +59,8 @@ class Port32Bit {
 
   uint32_t read() {
     uint32_t ret;
-    asm(
+    // add volatile so compiler does not move the input instruction out of a loop
+    asm volatile (
         "inl %1, %0" : "=a"(ret) : "d"(port_) /* port should go to edx */:
     );
     return ret;
