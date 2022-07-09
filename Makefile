@@ -30,6 +30,9 @@ ALL_DEPS := $(patsubst %.o,%.d,$(ALL_OBJ))
 #    This is only needed for C++. C compiler does not warn this by default.
 CFLAGS := -MD -I. -Icinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch -Wno-pointer-arith $(EXTRA_CFLAGS)
 
+# extra CFLAGS for boot loader
+BOOT_CFLAGS := -Os
+
 USER_CFLAGS := $(CFLAGS) -Iuinc
 
 # set run as the default rule
@@ -39,6 +42,11 @@ run:
 clean-run:
 	rm -f fs.img
 	$(MAKE) run
+
+# specialize for c file under boot to add bootloader specific CFLAGS
+out/boot/%.o: boot/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(BOOT_CFLAGS) -c $< -o $@
 
 out/%.o: %.c
 	mkdir -p $(dir $@)
@@ -60,6 +68,11 @@ out/%.o: %.cpp
 out/kernel/interrupt_entry.o: kernel/interrupt_entry.S
 	mkdir -p $(dir $@)
 	$(CC) -c $< -o $@
+
+# specialize for .s file under boot to add bootloader specific CFLAGS
+out/boot/%.o: boot/%.s
+	mkdir -p $(dir $@)
+	$(CC) -c $(BOOT_CFLAGS) $< -o $@
 
 out/%.o: %.s
 	mkdir -p $(dir $@)
