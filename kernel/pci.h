@@ -12,9 +12,12 @@ extern Port32Bit pci_data_port;
 #define MAX_NUM_DEVICES_PER_BUS 32 // max number of devices per bus
 #define MAX_NUM_FUNCTIONS_PER_DEVICE 8 // max number of functions per device
 
+#define COMMAND_STATUS_BUS_MASTER_BIT 2
+
 // check PCI osdev wiki
 #define CONFIG_OFF_VENDOR_ID 0x0 // 2 byte size
 #define CONFIG_OFF_DEVICE_ID 0x2 // 2 byte size
+#define CONFIG_OFF_COMMAND_STATUS 0x4
 #define CONFIG_OFF_CLASS_CODE 0xB // 1 byte size
 #define CONFIG_OFF_SUBCLASS_CODE 0xA // 1 byte size
 #define CONFIG_OFF_HEADER_TYPE 0xE // 1 byte size
@@ -122,6 +125,11 @@ class Bar {
   void set_size(uint32_t raw_size) {
     size_ = -clear_info_bits(raw_size);
   }
+
+  // Need access the memory region size so we can create vitual address mapping
+  uint32_t get_size() const {
+    return size_;
+  }
  private:
   uint32_t clear_info_bits(uint32_t raw) {
     if (is_mem_) {
@@ -192,6 +200,14 @@ class PCIFunction {
     // TODO pci-to-pci bridge device has less BARs
     assert(idx < 6);
     write_config<uint32_t>(CONFIG_OFF_BAR0 + idx * 4, new_bar);
+  }
+
+  /*
+   * Enabling the bus master bit is necessary for the device to do DMA
+   */
+  void enable_bus_master() const {
+    uint32_t oldval = read_config<uint32_t>(CONFIG_OFF_COMMAND_STATUS);
+    write_config<uint32_t>(CONFIG_OFF_COMMAND_STATUS, oldval | (1 << COMMAND_STATUS_BUS_MASTER_BIT));
   }
 
  private:

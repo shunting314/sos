@@ -19,6 +19,8 @@ void map_region(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, uint
 #define MAP_FLAG_WRITE (1UL << 0)
 #define MAP_FLAG_USER (1UL << 1)
 
+#define PAGE_SIZE 4096
+
 #ifdef __cplusplus
 }
 #endif

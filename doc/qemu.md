@@ -29,3 +29,6 @@ Here are some useful qemu monitor commands:
 - 'print /x sth': print in hexadecimal foramt
 - 'x /10i addr': disassemble 10 instructions at the specified address. Super useful
 - 'info tlb': check paging
+
+# Reference
+- [QEMU - networking](https://wiki.qemu.org/Documentation/Networking): This doc mentions the default IP addresses for the guest OS (10.0.2.15) and gateway (10.0.2.2). It also mentions an option (e.g. `-object filter-dump,id=f1,netdev=u1,file=dump.dat`) to dump the network packets inside QEMU to a file.

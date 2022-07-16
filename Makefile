@@ -14,7 +14,7 @@ ULIB_SRC_S := $(wildcard ulib/*.s)
 ULIB_OBJ := $(patsubst %.cpp,%.o,$(ULIB_SRC_CPP)) $(patsubst %.s,%.o,$(ULIB_SRC_S))
 ULIB_OBJ := $(addprefix out/,$(ULIB_OBJ)) # add out/ prefix
 
-KERNEL_SRC_CPP := $(wildcard kernel/*.cpp) $(wildcard kernel/nic/*.cpp)
+KERNEL_SRC_CPP := $(wildcard kernel/*.cpp) $(wildcard kernel/nic/*.cpp) $(wildcard kernel/net/*.cpp)
 KERNEL_SRC_C := $(wildcard kernel/*.c)
 KERNEL_SRC_S := $(wildcard kernel/*.s) $(wildcard kernel/*.S)
 KERNEL_OBJ := $(patsubst %.cpp,%.o,$(KERNEL_SRC_CPP)) $(patsubst %.c,%.o,$(KERNEL_SRC_C)) $(patsubst %.s,%.o,$(KERNEL_SRC_S))
@@ -94,6 +94,11 @@ img out/kernel.img: out/kernel/kernel out/boot/bootloader.bl
 	cat out/boot/bootloader.bl out/kernel/kernel > out/kernel.img
 	truncate -s `printf "%d\n" 0x50200` out/kernel.img
 
+# It's interesting to change QEMU source code by adding debugging code. E.g.
+# adding debugging code in hw/net/e1000.c in QEMU helps debugging the NIC driver.
+# Set QEMU_PREFIX to the directory of the installed QEMU if needed
+QEMU=$(QEMU_PREFIX)qemu-system-x86_64
+
 # We put the filesystem in hdb rather than put it together with the kernel in hda
 # to make it easy to recreate kernel image while keeping the fs image.
 run: out/kernel.img fs.img
@@ -104,7 +109,7 @@ run: out/kernel.img fs.img
 	#
 	# '-serial stdio' is added so the final content on the screen in the guest OS is available in the host terminal after terminating qemu.
 	#   One flaw: after adding this option, the first keyboard input is somehow lost.
-	qemu-system-x86_64 -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown $(QEMU_EXTRA)
+	$(QEMU) -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
 
 # start a connection to qemu monitor
 mon:

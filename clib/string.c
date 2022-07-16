@@ -1,19 +1,19 @@
 #include <string.h>
 
 // TODO add unit test
-void *memmove(void *dst, void *src, int n) {
+void *memmove(void *dst, const void *src, int n) {
   if (n <= 0) {
     return dst;
   }
   if (dst < src) {
     char *_dst = dst;
-    char *_src = src;
+    const char *_src = src;
     for (int i = 0; i < n; ++i, ++_src, ++_dst) {
       *_dst = *_src;
     }
   } else if (dst > src) {
     char *_dst = dst + n - 1;
-    char *_src = src + n - 1;
+    const char *_src = src + n - 1;
     for (int i = 0; i < n; ++i, --_src, --_dst) {
       *_dst = *_src;
     }
@@ -48,4 +48,12 @@ int strncmp(const char *s, const char *t, int len) {
     ++t;
   }
   return 0;
+}
+
+int strlen(const char* s) {
+  int len = 0;
+  while (*s++) {
+    ++len;
+  }
+  return len;
 }

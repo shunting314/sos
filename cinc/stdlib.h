@@ -1,6 +1,8 @@
 #ifndef STDLIB_H
 #define STDLIB_H
 
+#include <stdint.h>
+
 static inline int abs(int v) {
   return v > 0 ? v : -v;
 }
@@ -46,5 +48,29 @@ static inline int atoi(const char* s) {
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
 #define ROUND_UP(s, base) ((s + base - 1) / base * base)
+
+// return -1 for non hex char
+static inline int hexchar2int(char ch) {
+  if (ch >= '0' && ch <= '9') {
+    return ch - '0';
+  } else if (ch >= 'A' && ch <= 'F') {
+    return ch - 'A' + 10;
+  } else if (ch >= 'a' && ch <= 'f') {
+    return ch - 'a' + 10;
+  } else {
+    return -1;
+  }
+}
+
+static inline void hexdump(const uint8_t *data, int len) {
+  for (int i = 0; i < len; ++i) {
+    // TODO implememt padding for printf so we can pad 0 for single digit hex numbers here
+    printf(" %x", data[i]);
+    if ((i + 1) % 16 == 0) {
+      printf("\n");
+    }
+  }
+  printf("\n");
+}
 
 #endif

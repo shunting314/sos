@@ -19,7 +19,6 @@ static_assert(sizeof(paging_entry_t) == 4);
 #define CR0_PG (1UL << 31)
 #define CR0_WP (1UL << 16)
 #define PAGE_OFF_MASK 0xFFF
-#define PAGE_SIZE 4096
 #define PAGING_ENTRIES_PER_PAGE ((PAGE_SIZE) / sizeof(paging_entry_t))
 
 #define PDIDX(la) ((la >> 22) & 0x3FF)

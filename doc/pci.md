@@ -1,3 +1,10 @@
+# PCI Command & Status
+In PCI configuration space, there is a 32 bits `command_status` register at offset 4. The low 3 bits of the command register worth noting:
+
+- I/O Space (bit 0): enable this bit so CPU can access the device's I/O space
+- Memory Space (bit 1): enable this bit so CPU can access the device's memory space
+- Bus Master (bit 2): enable this bit so the device can do DMA.
+
 # Reference
 - [PCI Basics and Bus Enumeration - youtube](https://www.youtube.com/watch?v=qhIHu8mFrdg): this video explains the bus enumeration process pretty clearly.
 - [PCI - wikipedia](https://en.wikipedia.org/wiki/Peripheral_Component_Interconnect): Talk too much about circuits.
@@ -15,3 +22,4 @@
 - [PCI-X - wikipedia](https://en.wikipedia.org/wiki/PCI-X): PCI-X tries to improve upon PCI but like PCI, PCI-X is also superseded by PCIe.
 - [PCI Express - wikipedia](https://en.wikipedia.org/wiki/PCI_Express)
 - [PCI Express - osdev](https://wiki.osdev.org/PCI_Express) NOTE: the page is WIP.
+- [Bus Mastering - wikipedia](https://en.wikipedia.org/wiki/Bus_mastering)

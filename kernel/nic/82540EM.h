@@ -6,7 +6,29 @@
 #include <kernel/nic/nic.h>
 #include <string.h>
 
+#define REG_OFF_CTRL 0x0
+#define REG_OFF_STATUS 0x8
 #define REG_OFF_EERD 0x14
+#define REG_OFF_RCTL 0x100
+#define REG_OFF_TCTL 0x400
+
+#define REG_OFF_RDBAL 0x2800
+#define REG_OFF_RDBAH 0x2804
+#define REG_OFF_RDLEN 0x2808
+#define REG_OFF_RDH 0x2810
+#define REG_OFF_RDT 0x2818
+
+#define REG_OFF_TDBAL 0x3800
+#define REG_OFF_TDBAH 0x3804
+#define REG_OFF_TDLEN 0x3808
+#define REG_OFF_TDH 0x3810
+#define REG_OFF_TDT 0x3818
+
+#define REG_OFF_TPR 0x40D0 // total packets received
+#define REG_OFF_TPT 0x40D4 // total packets transmitted
+
+#define REG_OFF_RAL0 0x5400
+#define REG_OFF_RAH0 0x5404
 
 #define EEPROM_OFF_ENADDR_0 0
 #define EEPROM_OFF_ENADDR_1 1
@@ -37,8 +59,24 @@ REGStruct uint32ToRegStruct(uint32_t val) {
 class NICDriver_82540EM : public NICDriver {
  public:
   explicit NICDriver_82540EM(const PCIFunction& pci_func = PCIFunction()) : NICDriver(pci_func) { if (pci_func) { init(); } }
+
+  // send the packet synchrouously. T represent the ethernet payload
+  template <typename T>
+  void sync_send(MACAddr dst_mac_addr, T packet) {
+    sync_send(dst_mac_addr, (uint16_t) T::getEtherType(), (uint8_t*) &packet, sizeof(packet));
+  }
+
+  void dump_transmit_descriptor_regs();
+  void dump_receive_descriptor_regs();
+
+  // the counter may lag a bit
+  uint32_t total_packet_transmitted() {
+    return read_nic_register(REG_OFF_TPT);
+  }
  private:
   void init();
+  void init_transmit_descriptor_ring();
+  void init_receive_descriptor_ring();
 
   // 82540EM internal registers are 32 bits size.
   // offset is in byte unit and should align on 4 bytes boundary.
@@ -47,6 +85,8 @@ class NICDriver_82540EM : public NICDriver {
 
   // woff is offset of 16bit word
   uint16_t read_eeprom_word(int woff);
+
+  void sync_send(MACAddr dst_mac_addr, uint16_t etherType, uint8_t *data, int len);
 
   Bar membar_;
 };
