@@ -25,7 +25,7 @@ class MACAddr {
 
   explicit MACAddr(const char* macstr);
 
-  void print() {
+  void print() const {
     printf("MAC address: ");
     for (int i = 0; i < 6; ++i) {
       printf("%x", addr_[i]);

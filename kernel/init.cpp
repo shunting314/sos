@@ -33,7 +33,11 @@ void *load_from_disk(char *buf, int bufsize, int file_off, int nbytes_needed) {
 
 void kernel_elf_init() {
   char buf_ehdr[512]; // one sector is enough
-  char buf_shdrtable[4096];
+  // The kernel ELF can have around 100 sections, each section header has 40 bytes.
+  // The total buffer size needed would be around 4000 + 512 bytes.
+  // The 512 bytes is for rounding to sector boundary. 4096 bytes buffer size
+  // may not be enough.
+  char buf_shdrtable[4096 * 2];
   char buf_init_fn_table[4096];
 
   Elf32_Ehdr* ehdr = (Elf32_Ehdr*) load_from_disk(buf_ehdr, sizeof(buf_ehdr), 0, sizeof(Elf32_Ehdr));

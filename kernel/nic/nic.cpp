@@ -32,11 +32,18 @@ void nic_init() {
   self_mac = nic_driver->getMACAddr();
   self_mac.print();
 
-  // TODO: try to send and recv ARP messages
   ARPPacket arp_request = ARPPacket::createRequest(gateway_ip);
-  for (int i = 0; i < 12; ++i) { // send more than 8 (RING size) requests for testing
+  // send more than 8 (transmit RING size) requests for testing. We will succeed to send
+  // 12 arp requests out. We are supposed to receive 12 ARP responses.
+  // However, because the receive ring size is 8, we can buffer at most 7 packets.
+  // The extra 5 packets will be discarded because of buffer overrun.
+  for (int i = 0; i < 12; ++i) {
     nic_driver->sync_send(allone_mac, arp_request);
   }
   printf("total packets transmitted %d\n", nic_driver->total_packet_transmitted());
+
+  for (int i = 0; i < 12; ++i) {
+    nic_driver->sync_recv();
+  }
   assert(false && "nic_init");
 }

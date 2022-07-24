@@ -2,6 +2,7 @@
 
 #include <kernel/net/net.h>
 #include <kernel/net/crc.h>
+#include <kernel/net/byteorder.h>
 #include <string.h>
 
 #define PAYLOAD_OFF 14
@@ -37,12 +38,28 @@ class EthernetFrame {
     *((uint32_t*) (frame_buf() + frame_len())) = crc;
     crc_len_ = 4;
   }
+
+  const uint8_t* payload() const {
+    return frame_.payload_;
+  }
+  
+  const MACAddr& dst_mac_addr() const {
+    return frame_.dst_mac_addr_;
+  }
+
+  const MACAddr& src_mac_addr() const {
+    return frame_.src_mac_addr_;
+  }
+
+  uint16_t ether_type() const {
+    return ntoh(frame_.ether_type_);
+  }
  private:
   union {
     struct {
       MACAddr dst_mac_addr_;
       MACAddr src_mac_addr_;
-      uint16_t etherType_; // network byte order
+      uint16_t ether_type_; // network byte order
       uint8_t payload_[0];
       // crc32
     } frame_;

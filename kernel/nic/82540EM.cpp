@@ -1,8 +1,12 @@
 #include <kernel/nic/82540EM.h>
 #include <kernel/net/ethernet_frame.h>
+#include <kernel/net/arp.h>
 #include <kernel/paging.h>
 #include <kernel/phys_page.h>
 #include <assert.h>
+#include <stdlib.h>
+
+static int recv_cnt = 0;
 
 // 82540EM is little endian
 struct LegacyTransmitDescriptor {
@@ -41,9 +45,18 @@ static_assert(sizeof(LegacyTransmitDescriptor) == 16);
 struct ReceiveDescriptor {
   uint32_t buffer_address_low;
   uint32_t buffer_address_high;
-  uint32_t dumb_low, dumb_high;
+  uint16_t length;
+  uint16_t packet_checksum;
+  // status byte
+  uint8_t ST_DD : 1;
+  uint8_t ST_EOP : 1;
+  uint8_t ST_reset : 6;
+  uint8_t errors;
+  uint16_t special;
   void print() {
-    printf("RD 0x%x 0x%x 0x%x 0x%x\n", buffer_address_low, buffer_address_high, dumb_low, dumb_high);
+    assert(buffer_address_high == 0);
+    printf("RD addr 0x%x, length 0x%x, packet chksum 0x%x, errors 0x%x, special 0x%x\n", buffer_address_low, length, packet_checksum, errors, special);
+    printf("  DD %d, EOP %d\n", ST_DD, ST_EOP);
   }
 };
 static_assert(sizeof(ReceiveDescriptor) == 16);
@@ -62,6 +75,7 @@ void NICDriver_82540EM::dump_transmit_descriptor_regs() {
 }
 
 void NICDriver_82540EM::dump_receive_descriptor_regs() {
+  printf("REG_OFF_RDLEN 0x%x\n", read_nic_register(REG_OFF_RDLEN));
   printf("REG_OFF_RDH %x\n", read_nic_register(REG_OFF_RDH));
   printf("REG_OFF_RDT %x\n", read_nic_register(REG_OFF_RDT));
 }
@@ -107,7 +121,26 @@ void NICDriver_82540EM::write_nic_register(int off, uint32_t val) {
 }
 
 void NICDriver_82540EM::init_receive_descriptor_ring() {
-  // TODO not implemented yet
+  // set receive address
+  write_nic_register(REG_OFF_RAL0, *((const uint32_t*) mac_addr_.get_addr()));
+  write_nic_register(REG_OFF_RAH0, *((const uint16_t*) (mac_addr_.get_addr() + 4)) | 0x80000000);
+
+  receive_descriptor_ring = (ReceiveDescriptor*) alloc_phys_page();
+  memset(receive_descriptor_ring, 0, PAGE_SIZE);
+  for (int i = 0; i < RING_SIZE; ++i) {
+    receive_descriptor_ring[i].buffer_address_low = alloc_phys_page();
+  }
+  write_nic_register(REG_OFF_RDBAL, (uint32_t) receive_descriptor_ring);
+  write_nic_register(REG_OFF_RDBAH, 0);
+  write_nic_register(REG_OFF_RDLEN, RING_SIZE * sizeof(ReceiveDescriptor)); // size in bytes
+
+  write_nic_register(REG_OFF_RDH, 0);
+  write_nic_register(REG_OFF_RDT, RING_SIZE - 1);
+
+  dump_receive_descriptor_regs();
+  printf("RCTL 0x%x\n", read_nic_register(REG_OFF_RCTL));
+  write_nic_register(REG_OFF_RCTL, read_nic_register(REG_OFF_RCTL) | 0x2); // EN
+  printf("RCTL 0x%x\n", read_nic_register(REG_OFF_RCTL));
 }
 
 void NICDriver_82540EM::init_transmit_descriptor_ring() {
@@ -178,6 +211,8 @@ void NICDriver_82540EM::init() {
  * TO avoid confusing the case of full and empty ring, we block if RING_SIZE - 1
  * descriptors are in use. That means, there is always at least 1 descriptor
  * not used.
+ *
+ * TDH, TDT are initialized to 0, 0
  */
 void NICDriver_82540EM::sync_send(MACAddr dst_mac_addr, uint16_t etherType, uint8_t *data, int len) {
   EthernetFrame frame(dst_mac_addr, etherType, data, len);
@@ -186,7 +221,6 @@ void NICDriver_82540EM::sync_send(MACAddr dst_mac_addr, uint16_t etherType, uint
   frame.print();
   #endif
 
-  // assume we always have an available transmit descriptor ATM
   uint32_t tail_off = read_nic_register(REG_OFF_TDT);
   while (true) {
     uint32_t head_off = read_nic_register(REG_OFF_TDH);
@@ -206,7 +240,51 @@ void NICDriver_82540EM::sync_send(MACAddr dst_mac_addr, uint16_t etherType, uint
 
   write_nic_register(REG_OFF_TDT, (tail_off + 1) % RING_SIZE);
 
-  // dump_transmit_descriptor_regs();
   while (!picked_desc->STA_DD) {
   }
+}
+
+/*
+ * 'RDH == RDT' indicates an empty FIFO and hardware starts dropping packets in this case.
+ * Hardward increment RDH after putting an packet to the FIFO;
+ * Software increment RDT after consuming an packet from the FIFO.
+ *
+ * RDH and RDT are intitialized to 0, RING_SIZE - 1
+ */
+void NICDriver_82540EM::sync_recv() {
+  uint32_t tail_off = read_nic_register(REG_OFF_RDT);
+
+  dump_receive_descriptor_regs();
+  printf("Waiting for incoming packets...\n");
+  while (true) {
+    uint32_t head_off = read_nic_register(REG_OFF_RDH);
+    if ((tail_off + 1) % RING_SIZE != head_off) {
+      break;
+    }
+  }
+  tail_off = (tail_off + 1) % RING_SIZE;
+  printf("(recv seq %d) Receive descriptor at %d should have data!\n", recv_cnt++, tail_off);
+  ReceiveDescriptor* picked_desc = (ReceiveDescriptor*) (receive_descriptor_ring + tail_off);
+  hexdump((uint8_t*) picked_desc->buffer_address_low, 80);
+  picked_desc->print();
+  if (picked_desc->length < PAYLOAD_OFF) {
+    printf("Drop too short packet: %d\n", picked_desc->length);
+  } else {
+    EthernetFrame* ethframe = (EthernetFrame*) picked_desc->buffer_address_low;
+    ethframe->dst_mac_addr().print();
+    ethframe->src_mac_addr().print();
+    auto ethType = (EtherType) ethframe->ether_type();
+    printf("ether type 0x%x\n", ethType);
+    int rest_length = picked_desc->length - PAYLOAD_OFF;
+    if (ethType == EtherType::ARP) {
+      ARPPacket* arp = (ARPPacket *) ethframe->payload();
+      if (rest_length < sizeof(ARPPacket)) {
+        printf("Not enough payload for ARP packet.\n");
+      } else {
+        arp->print();
+      }
+    }
+  }
+  ((uint64_t*) picked_desc)[1] = 0; // clear the recv descriptor except the address part
+  write_nic_register(REG_OFF_RDT, tail_off);
 }

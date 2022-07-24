@@ -43,6 +43,25 @@ struct ARPPacket {
   static EtherType getEtherType() {
     return EtherType::ARP;
   }
+
+  const char* typeStr() const {
+    switch (ntoh(operation_)) {
+      case ARP_OP_REQUEST: return "REQUEST";
+      case ARP_OP_REPLY: return "REPLY";
+      default:
+        break;
+    }
+    assert(false && "Invalid operation");
+    return "";
+  }
+
+  void print() {
+    printf("ARP '%s'\n", typeStr());
+    src_hardware_address.print();
+    src_protocol_address.print();
+    dst_hardware_address.print();
+    dst_protocol_address.print();
+  }
 };
 
 static_assert(sizeof(ARPPacket) == 28);

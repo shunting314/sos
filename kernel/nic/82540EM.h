@@ -65,6 +65,10 @@ class NICDriver_82540EM : public NICDriver {
   void sync_send(MACAddr dst_mac_addr, T packet) {
     sync_send(dst_mac_addr, (uint16_t) T::getEtherType(), (uint8_t*) &packet, sizeof(packet));
   }
+  // sync_recv is purely used for debugging for now.
+  // It wait for at least one incoming packets and then
+  // process all available incoming packets before returning.
+  void sync_recv();
 
   void dump_transmit_descriptor_regs();
   void dump_receive_descriptor_regs();
