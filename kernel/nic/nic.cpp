@@ -42,8 +42,12 @@ void nic_init() {
   }
   printf("total packets transmitted %d\n", nic_driver->total_packet_transmitted());
 
-  for (int i = 0; i < 12; ++i) {
-    nic_driver->sync_recv();
+  // wait for an available packet
+  while (!nic_driver->unblock_recv()) {
   }
-  assert(false && "nic_init");
+  while (nic_driver->unblock_recv()) {
+  }
+  assert(gateway_mac != allzero_mac && "gateway mac address uninitialized");
+  printf("Gateway MAC address:\n");
+  gateway_mac.print();
 }

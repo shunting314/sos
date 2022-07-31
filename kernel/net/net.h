@@ -7,6 +7,20 @@ class IPAddr {
   explicit IPAddr() = default;
   explicit IPAddr(const char* ipstr);
   void print() const;
+
+  bool operator==(const IPAddr& rhs) const {
+    const IPAddr& lhs = *this;
+    for (int i = 0; i < 4; ++i) {
+      if (lhs.addr_[i] != rhs.addr_[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool operator!=(const IPAddr& rhs) const {
+    return !((*this) == rhs);
+  }
  private:
   uint8_t addr_[4];
 };
@@ -38,6 +52,20 @@ class MACAddr {
   }
 
   const uint8_t* get_addr() const { return addr_; };
+
+  bool operator==(const MACAddr& rhs) {
+    const MACAddr& lhs = *this;
+    for (int i = 0; i < 6; ++i) {
+      if (lhs.addr_[i] != rhs.addr_[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool operator!=(const MACAddr& rhs) {
+    return !((*this) == rhs);
+  }
  private:
   uint8_t addr_[6];
 };

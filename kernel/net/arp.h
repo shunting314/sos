@@ -44,8 +44,12 @@ struct ARPPacket {
     return EtherType::ARP;
   }
 
+  uint16_t operation() const {
+    return ntoh(operation_);
+  }
+
   const char* typeStr() const {
-    switch (ntoh(operation_)) {
+    switch (operation()) {
       case ARP_OP_REQUEST: return "REQUEST";
       case ARP_OP_REPLY: return "REPLY";
       default:

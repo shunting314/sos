@@ -1,6 +1,7 @@
 #include <kernel/nic/82540EM.h>
 #include <kernel/net/ethernet_frame.h>
 #include <kernel/net/arp.h>
+#include <kernel/net/callback.h>
 #include <kernel/paging.h>
 #include <kernel/phys_page.h>
 #include <assert.h>
@@ -244,6 +245,10 @@ void NICDriver_82540EM::sync_send(MACAddr dst_mac_addr, uint16_t etherType, uint
   }
 }
 
+bool NICDriver_82540EM::has_incoming_frame()  {
+  return (read_nic_register(REG_OFF_RDT) + 1) % RING_SIZE != read_nic_register(REG_OFF_RDH);
+}
+
 /*
  * 'RDH == RDT' indicates an empty FIFO and hardware starts dropping packets in this case.
  * Hardward increment RDH after putting an packet to the FIFO;
@@ -256,11 +261,7 @@ void NICDriver_82540EM::sync_recv() {
 
   dump_receive_descriptor_regs();
   printf("Waiting for incoming packets...\n");
-  while (true) {
-    uint32_t head_off = read_nic_register(REG_OFF_RDH);
-    if ((tail_off + 1) % RING_SIZE != head_off) {
-      break;
-    }
+  while (!has_incoming_frame()) {
   }
   tail_off = (tail_off + 1) % RING_SIZE;
   printf("(recv seq %d) Receive descriptor at %d should have data!\n", recv_cnt++, tail_off);
@@ -281,10 +282,20 @@ void NICDriver_82540EM::sync_recv() {
       if (rest_length < sizeof(ARPPacket)) {
         printf("Not enough payload for ARP packet.\n");
       } else {
+        NetCallback::on_recv_arp_packet(*arp);
         arp->print();
       }
     }
   }
   ((uint64_t*) picked_desc)[1] = 0; // clear the recv descriptor except the address part
   write_nic_register(REG_OFF_RDT, tail_off);
+}
+
+bool NICDriver_82540EM::unblock_recv() {
+  if (!has_incoming_frame()) {
+    return false;
+  } else {
+    sync_recv();
+    return true;
+  }
 }

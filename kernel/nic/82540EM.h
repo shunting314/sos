@@ -69,6 +69,10 @@ class NICDriver_82540EM : public NICDriver {
   // It wait for at least one incoming packets and then
   // process all available incoming packets before returning.
   void sync_recv();
+  // This method returns true iff an ethernet frame is received.
+  // If there is no ethernet frame available, return false immediately.
+  // The method has side effect: e.g., it will record the gateway MAC address.
+  bool unblock_recv();
 
   void dump_transmit_descriptor_regs();
   void dump_receive_descriptor_regs();
@@ -91,6 +95,8 @@ class NICDriver_82540EM : public NICDriver {
   uint16_t read_eeprom_word(int woff);
 
   void sync_send(MACAddr dst_mac_addr, uint16_t etherType, uint8_t *data, int len);
+
+  bool has_incoming_frame();
 
   Bar membar_;
 };
