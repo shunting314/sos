@@ -8,6 +8,8 @@
 #include <kernel/pci.h>
 #include <kernel/nic/nic.h>
 #include <kernel/init.h>
+#include <kernel/sleep.h>
+#include <kernel/pit.h>
 #include <stdio.h>
 
 #ifdef TEST_LARGE_KERNEL
@@ -18,6 +20,8 @@ extern "C" void kernel_main() {
   vga_clear();
   kernel_elf_init();
   puts("Hello, World!");
+
+  init_pit();
   setup_idt();
 
   setup_phys_page_freelist();
@@ -28,5 +32,12 @@ extern "C" void kernel_main() {
   lspci();
   collect_pci_devices();
   nic_init();
+
+#ifdef TEST_SLEEP
+  for (int i = 0; i < 300; ++i) {
+    printf("message %d\n", i);
+    msleep(1000);
+  }
+#endif
   kshell();
 }

@@ -46,6 +46,8 @@ struct InterruptFrame {
 
 static_assert(sizeof(InterruptFrame) == 24 + 32);
 
+int64_t getTick();
+
 #ifdef __cplusplus
 }
 #endif

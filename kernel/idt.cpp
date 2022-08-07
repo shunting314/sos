@@ -10,11 +10,22 @@
 
 #define NIDT_ENTRY 256
 
+volatile int64_t timer_tick = 0;
+
+int64_t getTick() {
+  return timer_tick;
+}
+
+static void incTick() {
+  ++timer_tick;
+}
+
 // the handler for interrupts we care. Force C symbol to make it convenient to call
 // it from assembly.
 extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
   UserProcess::set_frame_for_current(framePtr);
   if (intNum == 32) { // call scheduler for timer interrupt
+    incTick();
     UserProcess::sched();
     // sched may return if there is no current process
     // that's why we need call framePtr->returnFromInterrupt
