@@ -6,16 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 
-struct paging_entry {
-  uint32_t present : 1;
-  uint32_t r_w : 1;
-  uint32_t u_s : 1;
-  uint32_t others : 9;
-  uint32_t phys_page_no : 20;
-};
-typedef struct paging_entry paging_entry_t;
-static_assert(sizeof(paging_entry_t) == 4);
-
 #define CR0_PG (1UL << 31)
 #define CR0_WP (1UL << 16)
 #define PAGE_OFF_MASK 0xFFF
@@ -24,10 +14,26 @@ static_assert(sizeof(paging_entry_t) == 4);
 #define PDIDX(la) ((la >> 22) & 0x3FF)
 #define PTIDX(la) ((la >> 12) & 0x3FF)
 #define PGOFF(la) (la & 0xFFF)
+#define MAKE_LADDR(pdx, ptx, off) ((uint32_t) ((pdx << 22) | (ptx << 12) | off))
 
 #define GET_PGENTRY_PTR(tbl, idx) (paging_entry_t*) ((uint32_t) tbl + idx * 4)
 #define GET_PDE_PTR(tbl, la) GET_PGENTRY_PTR(tbl, PDIDX(la))
 #define GET_PTE_PTR(tbl, la) GET_PGENTRY_PTR(tbl, PTIDX(la))
+
+/*
+ * Return the pointer to the PTE for the linear address in the page directory.
+ * Assumes the page directory entry exists. The logic is quite similar to
+ * map_page except we don't need to allocate a page table here.
+ *
+ * It's okay if la is not page aligned.
+ */
+paging_entry_t* get_pte_ptr(phys_addr_t page_dir, uint32_t la) {
+  paging_entry_t* ppde = GET_PDE_PTR(page_dir, la);
+  assert(ppde->present); // assume the presence of the page table
+  phys_addr_t page_tbl = (ppde->phys_page_no << 12);
+  paging_entry_t* ppte = GET_PTE_PTR(page_tbl, la);
+  return ppte;
+}
 
 void map_page(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, int map_flags) {
   paging_entry_t* ppde = GET_PDE_PTR(page_dir, la_start);
@@ -55,6 +61,8 @@ void map_page(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, int ma
   }
   if (map_flags & MAP_FLAG_USER) {
     ppte->u_s = 1;
+    // increase the reference
+    PhysPageStat::incRefCountUser(pa_start);
   }
   ppte->phys_page_no = (pa_start >> 12);
 }
@@ -120,8 +128,8 @@ void release_pgdir(phys_addr_t pgdir) {
       auto pte_list = (paging_entry*) (pde_list[i].phys_page_no << 12);
       for (int j = 0; j < PAGING_ENTRIES_PER_PAGE; ++j) {
         if (pte_list[j].present && pte_list[j].u_s) {
-          // release the page frame
-          free_phys_page(pte_list[j].phys_page_no << 12);
+          // release the page frame if refcount reaches 0 after decrementing
+          PhysPageStat::decRefCountUser(pte_list[j].phys_page_no << 12); 
         }
       }
       // release the page table
@@ -132,8 +140,47 @@ void release_pgdir(phys_addr_t pgdir) {
   free_phys_page(pgdir);
 }
 
-// TODO implement COW
-phys_addr_t clone_address_space(phys_addr_t parent_pgdir) {
+static void cow_clone_page(uint32_t la, paging_entry& parent_pte, paging_entry& child_pte) {
+  assert(parent_pte.present);
+  assert(parent_pte.u_s);
+  assert(!child_pte.present);
+
+  // Need the following special logic for writable page. Don't need special
+  // handing for readonly or COW pages.
+  //
+  // So here is a summary of different scenarios
+  // 1. the parent page is writable. Turn that into a COW page (readonly page with COW flag on)
+  // 2. the parent page is a readonly/cow page. Keep it as a readonly/cow page.
+  if (parent_pte.r_w) {
+    parent_pte.r_w = 0;
+
+    // set the flag so we know this readonly page is actually a COW page.
+    // The page fault handler should copy the page content and setup a writable
+    // mapping (unless it's the last user space reference to this page, in which
+    // case the pfhandler can directly change the mapping to be writable without
+    // allocating a new physical page).
+    assert(!parent_pte.cow);
+    parent_pte.cow = 1;
+
+    asm_invlpg(la);
+  }
+
+  child_pte = parent_pte;
+  // increment refcount
+  PhysPageStat::incRefCountUser(parent_pte.phys_page_no << 12);
+}
+
+static void dumb_clone_page(paging_entry& parent_pte, paging_entry& child_pte) {
+  auto new_pgframe = alloc_phys_page();
+  memmove((void*) new_pgframe, (void*) (parent_pte.phys_page_no << 12), 4096);
+  child_pte = parent_pte;
+  child_pte.phys_page_no = (new_pgframe >> 12);
+
+  // increment refcount
+  PhysPageStat::incRefCountUser(new_pgframe);
+}
+
+phys_addr_t clone_address_space(phys_addr_t parent_pgdir, bool use_cow) {
   auto child_pgdir = alloc_phys_page();
   memmove((void*) child_pgdir, (void*) kernel_page_dir, 4096);
 
@@ -151,10 +198,11 @@ phys_addr_t clone_address_space(phys_addr_t parent_pgdir) {
       auto child_pte_list = (paging_entry*) (child_pde_list[i].phys_page_no << 12);
       for (int j = 0; j < PAGING_ENTRIES_PER_PAGE; ++j) {
         if (parent_pte_list[j].present && parent_pte_list[j].u_s) {
-          auto new_pgframe = alloc_phys_page();
-          memmove((void*) new_pgframe, (void*) (parent_pte_list[j].phys_page_no << 12), 4096);
-          child_pte_list[j] = parent_pte_list[j];
-          child_pte_list[j].phys_page_no = (new_pgframe >> 12);
+          if (use_cow) {
+            cow_clone_page(MAKE_LADDR(i, j, 0), parent_pte_list[j], child_pte_list[j]);
+          } else {
+            dumb_clone_page(parent_pte_list[j], child_pte_list[j]);
+          }
         }
       }
     }

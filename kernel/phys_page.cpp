@@ -1,11 +1,14 @@
 #include <kernel/phys_page.h>
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 extern char END[];
 
 // TODO: hardcode to 10M for now. Should find a way to detect this automatically
 uint32_t phys_mem_amount = 10 * 1024 * 1024; // unit is byte
+PhysPageStat* phys_page_stats;
 
 struct physical_page {
   struct physical_page* next;
@@ -38,11 +41,26 @@ uint32_t num_avail_phys_pages() {
     ++num_pages;
   }
   return num_pages;
-} 
+}
+
+// simply place the phys_page_stats list after END.
+static phys_addr_t setup_phys_page_stats() {
+  auto end = (phys_addr_t) END;
+  uint32_t entry_size = sizeof(PhysPageStat);
+  end = ROUND_UP(end, entry_size);
+  uint32_t num_entry = phys_mem_amount / 4096;
+  phys_page_stats = (PhysPageStat*) end;
+  end += entry_size * num_entry;
+
+  // clear the memory
+  memset(phys_page_stats, 0, entry_size * num_entry);
+  return end;
+}
 
 void setup_phys_page_freelist() {
   assert(phys_mem_amount % 4096 == 0);
-  uint32_t first_free_page = ((((uint32_t) END) + 0xFFF) & ~0xFFF);
+  auto end = setup_phys_page_stats();
+  uint32_t first_free_page = ((end + 0xFFF) & ~0xFFF);
   int nalloc = 0;
   for (uint32_t free_page = first_free_page; free_page + 0xFFF < phys_mem_amount; free_page += 4096) {
     free_phys_page(free_page);

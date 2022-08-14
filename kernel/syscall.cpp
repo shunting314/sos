@@ -24,6 +24,10 @@ int sys_dumbfork() {
   return dumbfork();
 }
 
+int sys_fork() {
+  return cowfork();
+}
+
 int sys_getpid() {
   return UserProcess::current()->get_pid();
 }
@@ -35,6 +39,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* [SC_WRITE] = */ (void*) sys_write,
   /* [SC_EXIT] = */ (void*) sys_exit,
   /* SC_DUMBFORK */ (void*) sys_dumbfork,
+  /* SC_FORK */ (void*) sys_fork,
   /* SC_GETPID */ (void*) sys_getpid,
 };
 

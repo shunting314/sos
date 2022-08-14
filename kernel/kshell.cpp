@@ -265,6 +265,31 @@ char* parseCmdLine(char* line, char *args[]) {
   return cmd;
 }
 
+static void handleLine(char *line) {
+  char* args[128]; // add a nullptr after the last argument
+  char* cmdName = parseCmdLine(line, args);
+  if (cmdName == nullptr) {
+    cmdName = (char*) "nullptr";
+  }
+
+  int r;
+  int i;
+  for (i = 0; cmdList[i].cmdName; ++i) {
+    if (strcmp(cmdList[i].cmdName, cmdName) == 0) {
+      r = cmdList[i].cmdFn(args);
+      if (r != 0) {
+        printf("Fail to execute command %s, return code %d\n", cmdName, r);
+      }
+      break;
+    }
+  }
+  // unknown cmd
+  if (!cmdList[i].cmdName) {
+    printf("Command '%s' is unknown\n", cmdName);
+    cmdHelp(args);
+  }
+}
+
 void kshell() {
   // enable the interrupt here. It's mainly needed when we enter kshell after
   // terminating the last process. In that case, the user process enters kernel
@@ -273,34 +298,28 @@ void kshell() {
   // We should reenable interrupt so kshell get keyboard inputs.
   asm("sti");
 
+  // #define QUICK_TEST 1
+#if QUICK_TEST
+  // only execute the predefined command for the first time to avoid it being
+  // executed in a dead loop. NOTE that handleLine may not return for some commands.
+  // E.g. for 'launch shell', when all the user processes terminate, the kernel
+  // calls kshell again. Without this flag, kernel will repeatedly execute the
+  // command.
+  static int first_time = 1;
+  char line[1024] = "launch shell";
+  if (first_time) {
+    first_time = 0;
+    handleLine(line);
+  }
+#else
   char line[1024];
-  char* args[128]; // add a nullptr after the last argument
+#endif
   while (1) {
     printf("> ");
     int got = keyboardReadLine(line, sizeof(line));
     if (got > 0 && line[got - 1] == '\n') {
       line[got - 1] = '\0';
     }
-    char* cmdName = parseCmdLine(line, args);
-    if (cmdName == nullptr) {
-      cmdName = (char*) "nullptr";
-    }
-
-    int r;
-    int i;
-    for (i = 0; cmdList[i].cmdName; ++i) {
-      if (strcmp(cmdList[i].cmdName, cmdName) == 0) {
-        r = cmdList[i].cmdFn(args);
-        if (r != 0) {
-          printf("Fail to execute command %s, return code %d\n", cmdName, r);
-        }
-        break;
-      }
-    }
-    // unknown cmd
-    if (!cmdList[i].cmdName) {
-      printf("Command '%s' is unknown\n", cmdName);
-      cmdHelp(args);
-    }
+    handleLine(line);
   }
 }

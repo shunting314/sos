@@ -7,6 +7,7 @@
 #include <kernel/syscall.h>
 #include <kernel/idt.h>
 #include <kernel/user_process.h>
+#include <kernel/page_fault.h>
 
 #define NIDT_ENTRY 256
 
@@ -39,7 +40,7 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
   if (intNum == 32 + 14 || intNum == 32 + 15) {
     framePtr->returnFromInterrupt();
   }
-  if (intNum == 48) { // do nothing for syscall for now
+  if (intNum == 48) {
 #if 0
     printf("Received a system call: eax 0x%x, args ebx 0x%x ecx 0x%x edx 0x%x esi 0x%x edi 0x%x\n",
         framePtr->eax, framePtr->ebx, framePtr->ecx, framePtr->edx,
@@ -49,6 +50,12 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
         framePtr->eax, framePtr->ebx, framePtr->ecx, framePtr->edx,
         framePtr->esi, framePtr->edi);
     framePtr->returnFromInterrupt();
+  }
+
+  // page fault
+  if (intNum == 14) {
+    pfhandler(framePtr);
+    assert(false && "pfhandler should not return");
   }
   printf("Handering interrupt %d (0x%x), error code is %d (0x%x), saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->error_code, framePtr->eip);
   assert(false && "Interrupt not implemented yet");

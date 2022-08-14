@@ -11,6 +11,20 @@ asm_set_cr3:
 )");
 
 asm(R"(
+.global asm_get_cr3
+asm_get_cr3:
+  movl %cr3, %eax
+  ret
+)");
+
+asm(R"(
+.global asm_get_cr2
+asm_get_cr2:
+  movl %cr2, %eax
+  ret
+)");
+
+asm(R"(
 .global asm_return_from_interrupt
 asm_return_from_interrupt:
   mov 4(%esp), %esp
@@ -67,5 +81,13 @@ asm(R"(
 .global asm_lidt
 asm_lidt:
   lidt idtrdesc
+  ret
+)");
+
+asm(R"(
+.global asm_invlpg
+asm_invlpg:
+  movl 4(%esp), %eax
+  invlpg (%eax)
   ret
 )");

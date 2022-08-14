@@ -153,3 +153,4 @@ shell: $(ULIB_OBJ) $(CLIB_OBJ)
 	mkdir -p out/user
 	$(CC) -c user/shell.cpp $(USER_CFLAGS) -o out/user/shell.o
 	$(LD) out/user/shell.o $^ -o out/user/shell -e entry -Tulib/user.ld
+	$(OBJDUMP) -dC out/user/shell > out/user/shell.asm

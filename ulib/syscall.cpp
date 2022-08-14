@@ -37,6 +37,10 @@ int dumbfork() {
   return syscall(SC_DUMBFORK, PHARG, PHARG, PHARG, PHARG, PHARG);
 }
 
+int fork() {
+  return syscall(SC_FORK, PHARG, PHARG, PHARG, PHARG, PHARG);
+}
+
 int getpid() {
   return syscall(SC_GETPID, PHARG, PHARG, PHARG, PHARG, PHARG);
 }

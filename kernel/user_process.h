@@ -30,7 +30,8 @@ class UserProcess {
   static void set_frame_for_current(InterruptFrame* framePtr);
 
   int get_pid();
-  UserProcess* clone();
+  UserProcess* clone(bool use_cow);
+  uint32_t getPgdir() { return pgdir_; }
  private:
   static UserProcess* allocate();
   static UserProcess* current_;

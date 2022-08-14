@@ -30,7 +30,12 @@ int main(void) {
     sum += i;
   }
   printf("sum from 1 to 100 is %d\n", sum);
+  // #define USE_DUMBFORK 1
+  #if USE_DUMBFORK
   int r = dumbfork();
+  #else
+  int r = fork();
+  #endif
   if (r < 0) {
     printf("Fail to fork, return %d\n", r);
   } else if (r == 0) { // child process
