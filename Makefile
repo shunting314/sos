@@ -59,6 +59,10 @@ out/ulib/%.o: ulib/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(USER_CFLAGS) -c $< -o $@
 
+out/user/%.o: user/%.cpp
+	mkdir -p out/user
+	$(CC) $(USER_CFLAGS) -c $< -o $@
+
 out/%.o: %.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CFLAGS) -c $< -o $@
@@ -125,9 +129,13 @@ fsimg fs.img:
 	mkdir -p out/fs_template
 	echo "Hello, simfs!" > out/fs_template/message
 	$(MAKE) one # don't put one as a prerequisite on purpose so fs.img does not get overriden whenever one needs to be rebuilt
-	$(MAKE) shell
+	$(MAKE) out/user/shell
+	$(MAKE) out/user/test_fork
+	$(MAKE) out/user/test_readfile
 	cp out/user/one out/fs_template
 	cp out/user/shell out/fs_template
+	cp out/user/test_fork out/fs_template
+	cp out/user/test_readfile out/fs_template
 	python3.6 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:
@@ -149,8 +157,6 @@ one:
 	$(CC) -c user/one.s -o out/user/one.o
 	$(LD) out/user/one.o -o out/user/one -e entry -Tulib/user.ld
 
-shell: $(ULIB_OBJ) $(CLIB_OBJ)
-	mkdir -p out/user
-	$(CC) -c user/shell.cpp $(USER_CFLAGS) -o out/user/shell.o
-	$(LD) out/user/shell.o $^ -o out/user/shell -e entry -Tulib/user.ld
-	$(OBJDUMP) -dC out/user/shell > out/user/shell.asm
+out/user/%: out/user/%.o $(ULIB_OBJ) $(CLIB_OBJ)
+	$(LD) $^ -o $@ -e entry -Tulib/user.ld
+	$(OBJDUMP) -dC $@ > $@.asm

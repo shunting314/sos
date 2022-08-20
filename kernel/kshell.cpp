@@ -298,7 +298,7 @@ void kshell() {
   // We should reenable interrupt so kshell get keyboard inputs.
   asm("sti");
 
-  // #define QUICK_TEST 1
+  #define QUICK_TEST 1
 #if QUICK_TEST
   // only execute the predefined command for the first time to avoid it being
   // executed in a dead loop. NOTE that handleLine may not return for some commands.
@@ -306,7 +306,7 @@ void kshell() {
   // calls kshell again. Without this flag, kernel will repeatedly execute the
   // command.
   static int first_time = 1;
-  char line[1024] = "launch shell";
+  char line[1024] = "launch test_readfile";
   if (first_time) {
     first_time = 0;
     handleLine(line);

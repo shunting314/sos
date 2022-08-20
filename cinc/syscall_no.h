@@ -6,5 +6,6 @@ enum {
   SC_DUMBFORK = 3,
   SC_FORK = 4,
   SC_GETPID = 5,
+	SC_OPEN = 6,
   NUM_SYS_CALL,
 };

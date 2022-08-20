@@ -63,7 +63,7 @@ class DirEnt {
   DirEntIterator begin() const;
   DirEntIterator end() const;
 
-  DirEnt findEnt(char *name, int len) const;
+  DirEnt findEnt(const char *name, int len) const;
 
   bool isdir() const {
     return ent_type == ET_DIR;
@@ -162,13 +162,13 @@ class SimFs {
   // the blockId here is a physical block id
   void readBlock(int blockId, uint8_t buf[], int len = BLOCK_SIZE);
   // walk path from rootdir
-  DirEnt walkPath(char* path) {
+  DirEnt walkPath(const char* path) {
     return walkPath(superBlock_.rootdir, path);
   }
 
   // walk path from the specified parent dir
   // path is relative to parent
-  DirEnt walkPath(const DirEnt& parent, char* path);
+  DirEnt walkPath(const DirEnt& parent, const char* path);
  private:
   static int blockIdToSectorNo(int blockId);
 

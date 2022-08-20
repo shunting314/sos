@@ -44,3 +44,7 @@ int fork() {
 int getpid() {
   return syscall(SC_GETPID, PHARG, PHARG, PHARG, PHARG, PHARG);
 }
+
+int open(const char*path, int oflags) {
+	return syscall(SC_OPEN, (int) path, oflags, PHARG, PHARG, PHARG);
+}

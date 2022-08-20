@@ -15,7 +15,7 @@ void printnum_unsigned(uint32_t num, int base, putchar_fn_t* putchar_fn) {
   putchar_fn(digits[num % base]);
 }
 
-void printnum(uint32_t num, int base, putchar_fn_t* putchar_fn) {
+void printnum(int num, int base, putchar_fn_t* putchar_fn) {
    // handle negative number
   if (num < 0) {
     putchar_fn('-');

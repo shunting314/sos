@@ -2,10 +2,13 @@
 
 #include <stdint.h>
 #include <kernel/idt.h>
+#include <kernel/file_desc.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define MAX_OPEN_FILE 64
 
 class UserProcess {
  public:
@@ -32,6 +35,19 @@ class UserProcess {
   int get_pid();
   UserProcess* clone(bool use_cow);
   uint32_t getPgdir() { return pgdir_; }
+
+  // The API does the following things:
+  // 1. Find a free filetab_ slot
+  // 2. assign an available FileDesc to it
+  // 3. setup the FileDesc using path and rwflags
+  // 4. return the index to the filetab_.
+  //
+  // If checkall is true, the API will also check slot 0/1/2 (stdin/stdout,stderr)
+  // for available slots.
+  int allocFd(const char* path, int rwflags, bool checkall=false);
+
+  // return true if the fd was used previously
+  bool releaseFd(int fd);
  private:
   static UserProcess* allocate();
   static UserProcess* current_;
@@ -39,6 +55,11 @@ class UserProcess {
   bool allocated_;
   uint32_t pgdir_;
   InterruptFrame intr_frame_;
+
+  // Store FileDesc* introduce one more indirection compared to storing FileDesc.
+  // It's necessary so we can dupliate a opened file as the POSIX dup syscall
+  // does.
+  FileDesc* filetab_[MAX_OPEN_FILE] = {nullptr};
 };
 
 extern uint32_t user_stack_start;

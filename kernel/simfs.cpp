@@ -23,7 +23,7 @@ DirEntIterator DirEnt::end() const {
   return DirEntIterator(this, file_size / sizeof(DirEnt));
 }
 
-DirEnt DirEnt::findEnt(char *name, int len) const {
+DirEnt DirEnt::findEnt(const char *name, int len) const {
   if (len < 0 || len > NAME_BUF_SIZE - 1) {
     return DirEnt(); // not found
   }
@@ -69,11 +69,11 @@ void SimFs::init() {
 /*
  * parent does not need to be a dir. If path is empty, we return parent directly.
  */
-DirEnt SimFs::walkPath(const DirEnt& parent, char* path) {
+DirEnt SimFs::walkPath(const DirEnt& parent, const char* path) {
   assert(parent);
   assert(path);
 
-  char *cur = path;
+  const char *cur = path;
   while (*cur == '/') {
     ++cur;
   }
@@ -87,7 +87,7 @@ DirEnt SimFs::walkPath(const DirEnt& parent, char* path) {
     return DirEnt();
   }
 
-  char *nxt = cur;
+  const char *nxt = cur;
   while (*nxt != '/' && *nxt != '\0') {
     ++nxt;
   }

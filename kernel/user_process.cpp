@@ -4,6 +4,7 @@
 #include <kernel/asm_util.h>
 #include <kernel/kshell.h>
 #include <kernel/idt.h>
+#include <kernel/file_desc.h>
 #include <assert.h>
 #include <string.h>
 
@@ -103,4 +104,42 @@ void UserProcess::sched(UserProcess* cur) {
 
   // no active processes any more, run kshell
   kshell();
+}
+
+// file descriptor related APIs. Move to a standalone file if the size for these
+// APIs grow
+
+bool UserProcess::releaseFd(int fd) {
+	FileDesc* fdptr = filetab_[fd];
+	if (!fdptr) {
+		return false;
+	}
+	filetab_[fd] = nullptr;
+	decref_file_desc(fdptr);
+	return true;
+}
+
+// TODO: we should cache DirEnt to avoid traverse the path everytime when accessing the
+// file.
+int UserProcess::allocFd(const char* path, int rwflags, bool checkall) {
+	int fd = -1;
+	int start_idx = checkall ? 0 : 3;
+	for (fd = start_idx; fd < MAX_OPEN_FILE && filetab_[fd]; ++fd) {
+	}
+	if (fd == MAX_OPEN_FILE) {
+		return -1; // too many open file
+	}
+	FileDesc* fdptr = alloc_file_desc();
+	if (!fdptr) {
+		return -1; // out of file desc
+	}
+	filetab_[fd] = fdptr;
+
+	if (fdptr->init(path, rwflags) < 0) {
+		// we should release the allocated resource if failure happens
+		releaseFd(fd);
+		return -1;
+	} else {
+		return fd;
+	}
 }

@@ -57,3 +57,11 @@ int strlen(const char* s) {
   }
   return len;
 }
+
+char *strcpy(char *dst, const char *src) {
+	int i = 0;
+	do {
+		dst[i] = src[i];
+	} while (dst[i++]);
+	return dst;
+}
