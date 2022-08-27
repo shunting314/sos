@@ -37,6 +37,14 @@ int sys_open(const char*path, int oflags) {
 	return file_open(path, oflags);	
 }
 
+int sys_read(int fd, void *buf, int nbyte) {
+	return file_read(fd, buf, nbyte);
+}
+
+int sys_close(int fd) {
+  return file_close(fd);
+}
+
 void *sc_handlers[NUM_SYS_CALL] = {
   nullptr, // number 0
   // "[SC_WRITE] = fptr; " seems work in C but is not supported by C++.
@@ -47,6 +55,8 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* SC_FORK */ (void*) sys_fork,
   /* SC_GETPID */ (void*) sys_getpid,
 	/* SC_OPEN */ (void*) sys_open,
+	/* SC_READ */ (void*) sys_read,
+  /* SC_CLOSE */ (void*) sys_close,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

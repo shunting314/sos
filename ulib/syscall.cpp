@@ -48,3 +48,11 @@ int getpid() {
 int open(const char*path, int oflags) {
 	return syscall(SC_OPEN, (int) path, oflags, PHARG, PHARG, PHARG);
 }
+
+int read(int fd, void *buf, int nbyte) {
+  return syscall(SC_READ, fd, (int) buf, nbyte, PHARG, PHARG);
+}
+
+int close(int fd) {
+  return syscall(SC_CLOSE, fd, PHARG, PHARG, PHARG, PHARG);
+}

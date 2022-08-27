@@ -17,10 +17,13 @@ class FileDesc {
   char path_[MAX_PATH_SIZE];
   int off_;
   int flags_;
+  uint8_t* blkbuf_ = nullptr;
 
   int init(const char*path, int rwflags);
 
   void freeme();
+  int read(void *buf, int nbyte);
+
  private:
   FileDesc* next_;  // used for the freelist
   friend FileDesc* alloc_file_desc();

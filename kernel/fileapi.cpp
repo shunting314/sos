@@ -18,3 +18,14 @@ int file_open(const char* path, int oflags) {
 	int fd = UserProcess::current()->allocFd(path, rwflags);
 	return fd;
 }
+
+int file_read(int fd, void *buf, int nbyte) {
+	if (nbyte <= 0 || !buf) {
+		return -1;
+	}
+	return UserProcess::current()->getFdptr(fd)->read(buf, nbyte);
+}
+
+int file_close(int fd) {
+  return UserProcess::current()->releaseFd(fd);
+}

@@ -2,11 +2,10 @@
 #include <syscall.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <unistd.h>
 
 // TODO support argc/argv for kernel launch cmd
 int main(void) {
-  printf("Enter the main function of shell\n");
-
   int nonexist_fd = open("/non-exist-file", O_RDONLY);
   assert(nonexist_fd < 0);
 
@@ -15,6 +14,20 @@ int main(void) {
   int fd = open("/message", O_RDONLY);
   assert(fd >= 0);
   printf("fd is %d\n", fd);
+
+	char buf[128];
+	int r;
+	// read the file content
+	printf("File content:\n");
+	while ((r = read(fd, buf, sizeof(buf) - 1)) != 0) {
+		assert(r > 0);
+		buf[r] = '\0';
+		printf("%s", buf);
+	}
+	printf("\n");
+
+  close(fd);
+
   printf("bye\n");
   return 0;
 }

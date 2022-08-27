@@ -6,3 +6,4 @@ int dumbfork();
 int fork(); // COW fork
 int getpid();
 int open(const char*path, int oflags);
+int read(int fd, void *buf, int nbyte);

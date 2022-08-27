@@ -109,14 +109,17 @@ void UserProcess::sched(UserProcess* cur) {
 // file descriptor related APIs. Move to a standalone file if the size for these
 // APIs grow
 
-bool UserProcess::releaseFd(int fd) {
+int UserProcess::releaseFd(int fd) {
+  if (fd < 0 || fd >= MAX_OPEN_FILE) {
+    return -1;
+  }
 	FileDesc* fdptr = filetab_[fd];
 	if (!fdptr) {
-		return false;
+		return 0;
 	}
 	filetab_[fd] = nullptr;
 	decref_file_desc(fdptr);
-	return true;
+	return 1;
 }
 
 // TODO: we should cache DirEnt to avoid traverse the path everytime when accessing the

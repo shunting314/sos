@@ -47,7 +47,8 @@ class UserProcess {
   int allocFd(const char* path, int rwflags, bool checkall=false);
 
   // return true if the fd was used previously
-  bool releaseFd(int fd);
+  int releaseFd(int fd);
+  FileDesc* getFdptr(int fd) { return filetab_[fd]; }
  private:
   static UserProcess* allocate();
   static UserProcess* current_;

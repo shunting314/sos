@@ -1,5 +1,8 @@
 #include <kernel/file_desc.h>
+#include <kernel/phys_page.h>
+#include <kernel/simfs.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define MAX_FILE_DESC 4096
 
@@ -45,11 +48,60 @@ int FileDesc::init(const char* path, int rwflags) {
     return -1;
   }
   strcpy(path_, path);
+  // blkbuf_ must have been reset to nullptr when the last user free the FileDesc
+  assert(blkbuf_ == nullptr);
   return 0;
 }
 
 void FileDesc::freeme() {
   FileDesc* fdptr = this;
+  // release the physical page if any is allocated
+  if (blkbuf_) {
+    free_phys_page((phys_addr_t) blkbuf_);
+    blkbuf_ = nullptr;
+  }
   fdptr->next_ = free_list;
   free_list = fdptr;
+}
+
+/*
+ * Invariants: when blkbuf_ is not None, blkbuf_[off_ % BLOCK_SIZE] contains
+ * the next byte of data.
+ */
+int FileDesc::read(void *buf, int nbyte) {
+  assert(nbyte > 0);
+  auto dent = SimFs::get().walkPath(path_); // TODO: should cache dent
+  assert(dent);
+  uint32_t file_size = dent.file_size;
+
+  int tot_read = 0; 
+  assert(off_ <= file_size);
+  while (tot_read < nbyte && off_ != file_size) {
+    if (!blkbuf_) {
+      blkbuf_ = (uint8_t*) alloc_phys_page();
+      uint32_t logical_blkid = off_ / BLOCK_SIZE;
+      uint32_t phys_blkid = dent.logicalToPhysBlockId(logical_blkid);
+      SimFs::get().readBlock(phys_blkid, blkbuf_);
+    }
+    assert(blkbuf_);
+
+    // read content into buf_
+    int tocpy = min(nbyte - tot_read, BLOCK_SIZE - off_ % BLOCK_SIZE);
+    // the content in blkbuf_ does not necessarily all be valid if the file size
+    // is not a multiple of BLOCK_SIZE. Use file_size as a cap
+    tocpy = min(tocpy, file_size - off_);
+    assert(tocpy > 0);
+    memmove(buf + tot_read, &blkbuf_[off_ % BLOCK_SIZE], tocpy);
+    tot_read += tocpy;
+    off_ += tocpy;
+    assert(off_ <= file_size);
+
+    // check if blkbuf_ need to be released
+    // We could alternatively read the next block
+    if (off_ % BLOCK_SIZE == 0) {
+      free_phys_page((phys_addr_t) blkbuf_);
+      blkbuf_ = nullptr;
+    }
+  }
+  return tot_read;
 }
