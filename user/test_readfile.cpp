@@ -2,7 +2,6 @@
 #include <syscall.h>
 #include <fcntl.h>
 #include <assert.h>
-#include <unistd.h>
 
 // TODO support argc/argv for kernel launch cmd
 int main(void) {

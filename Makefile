@@ -39,7 +39,7 @@ USER_CFLAGS := $(CFLAGS) -Iuinc
 run:
 
 # run with a fresh fs image
-clean-run:
+crun clean-run:
 	rm -f fs.img
 	$(MAKE) run
 
@@ -132,10 +132,12 @@ fsimg fs.img:
 	$(MAKE) out/user/shell
 	$(MAKE) out/user/test_fork
 	$(MAKE) out/user/test_readfile
+	$(MAKE) out/user/test_writefile
 	cp out/user/one out/fs_template
 	cp out/user/shell out/fs_template
 	cp out/user/test_fork out/fs_template
 	cp out/user/test_readfile out/fs_template
+	cp out/user/test_writefile out/fs_template
 	python3.6 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:

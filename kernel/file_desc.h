@@ -23,6 +23,7 @@ class FileDesc {
 
   void freeme();
   int read(void *buf, int nbyte);
+  int write(const void* buf, int nbyte);
 
  private:
   FileDesc* next_;  // used for the freelist

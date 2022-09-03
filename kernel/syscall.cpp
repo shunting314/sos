@@ -7,11 +7,7 @@
 #include <assert.h>
 
 int sys_write(int fd, void *buf, int cnt) {
-  char *s = (char*) buf;
-  for (int i = 0; i < cnt; ++i) {
-    putchar(s[i]);
-  }
-  return cnt;
+  return file_write(fd, buf, cnt);
 }
 
 // terminate the current process

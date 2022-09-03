@@ -24,7 +24,7 @@ syscall:
   ret
 )");
 
-int write(int fd, char* buf, int sz) {
+int write(int fd, const char* buf, int sz) {
   return syscall(SC_WRITE, fd, (int) buf, sz, PHARG, PHARG);
 }
 

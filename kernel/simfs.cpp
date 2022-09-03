@@ -38,6 +38,112 @@ DirEnt DirEnt::findEnt(const char *name, int len) const {
   return DirEnt(); // not found
 }
 
+// TODO: avoid duplicate code with findEnt by returning a pair of DirEnt and index
+// for findEnt
+int DirEnt::findEntIdx(const char* name, int len) const {
+  if (len < 0 || len > NAME_BUF_SIZE - 1) {
+    return -1; // not found
+  }
+  assert(isdir());
+  assert(file_size % sizeof(DirEnt) == 0);
+
+	int idx = 0;
+  for (auto curEntPtr : *this) {
+    if (!strncmp(curEntPtr->name, name, len) && curEntPtr->name[len] == '\0') {
+      return idx;
+    }
+		++idx;
+  }
+	return -1;
+}
+
+// fail if the entry already exists
+DirEnt DirEnt::createEnt(const char* path, int pathlen, const char *name, int namelen, int8_t ent_type) {
+	assert(!findEnt(name, namelen));
+	assert(this->ent_type == ET_DIR);
+	assert(file_size % sizeof(DirEnt) == 0);
+	int pos = file_size;
+
+	resize(file_size + sizeof(DirEnt)); // file_size changed
+  // flush the parent DirEnt to disk because of it's size change
+  // TODO: call flush inside resize after we add path into in-mem view of DirEnt
+	flush(path, pathlen);
+
+	assert(file_size == pos + sizeof(DirEnt));
+
+	DirEnt newent(name, namelen, ent_type);
+	write(pos, sizeof(DirEnt), &newent);
+	return newent;
+}
+
+void DirEnt::resize(int newsize) {
+	int oldsize = file_size;
+	file_size = newsize;
+
+	assert(newsize > oldsize);
+
+	// may need to allocate more blocks
+	int oldLastLogBlk = (oldsize - 1) / BLOCK_SIZE;
+	if (oldsize == 0) {
+		oldLastLogBlk = -1;
+	}
+	int newLastLogBlk = (newsize - 1) / BLOCK_SIZE;
+
+	assert(newLastLogBlk < N_DIRECT_BLOCK); // TODO support indirect block
+
+  // it's possible that no new blocks need to be allocated
+	for (int lb_idx = oldLastLogBlk + 1; lb_idx <= newLastLogBlk; ++lb_idx) {
+		blktable[lb_idx] = SimFs::get().allocPhysBlk();
+	}
+}
+
+void DirEnt::flush(const char* path, int pathlen) {
+  auto wpres = SimFs::get().walkPath(path, pathlen, true);
+  if (wpres.pathIsRoot) {
+    SimFs::get().updateRootDirEnt(*this);
+    return;
+  }
+  assert(wpres.dirent);
+  int child_idx = wpres.dirent.findEntIdx(wpres.lastItemPtr, wpres.lastItemLen);
+  wpres.dirent.write(child_idx * sizeof(DirEnt), sizeof(DirEnt), (const char*) this);
+}
+
+int DirEnt::write(int pos, int size, const void* buf) {
+	assert(pos >= 0);
+	assert(size >= 0);
+	assert(pos + size - 1 < file_size);
+	if (size == 0) {
+		return 0;
+	}
+
+	char block_cont[BLOCK_SIZE];
+	if (pos % BLOCK_SIZE != 0 || size < BLOCK_SIZE) {
+		// partial block
+		// read first, apply the update, then write back to the disk
+		readBlockForOff(pos, block_cont);
+		int ncpy = min(size, BLOCK_SIZE - pos % BLOCK_SIZE);
+		memmove(block_cont + pos % BLOCK_SIZE, buf, ncpy);
+		writeBlockForOff(pos, block_cont);
+		return write(pos + ncpy, size - ncpy, buf + ncpy) + ncpy;
+	} else {
+		// whole block. no need to read the block from the disk first
+    writeBlockForOff(pos, (const char*) buf);
+    return write(pos + BLOCK_SIZE, size - BLOCK_SIZE, buf + BLOCK_SIZE) + BLOCK_SIZE;
+	}
+}
+
+void DirEnt::readBlockForOff(int off, char *buf) {
+	int log_blk_idx = off / BLOCK_SIZE;
+	int phys_blk_idx = logicalToPhysBlockId(log_blk_idx);
+	SimFs::get().readBlock(phys_blk_idx, (uint8_t*) buf);
+}
+
+void DirEnt::writeBlockForOff(int off, const char *buf) {
+	int log_blk_idx = off / BLOCK_SIZE;
+	int phys_blk_idx = logicalToPhysBlockId(log_blk_idx);
+	SimFs::get().writeBlock(phys_blk_idx, (const uint8_t*) buf);
+}
+
 SimFs SimFs::instance_;
 
 /*
@@ -66,36 +172,115 @@ void SimFs::init() {
   printf("Total number of block in super block %d\n", superBlock_.tot_block);
 }
 
-/*
- * parent does not need to be a dir. If path is empty, we return parent directly.
- */
-DirEnt SimFs::walkPath(const DirEnt& parent, const char* path) {
-  assert(parent);
-  assert(path);
+DirEnt SimFs::walkPath(const char* path) {
+  return walkPath(path, strlen(path), false).dirent;
+}
 
-  const char *cur = path;
-  while (*cur == '/') {
+WalkPathResult SimFs::walkPath(const char* path, int pathlen, bool returnParent) {
+  assert(pathlen >= 0);
+  const char* end = path + pathlen;
+  const char* cur = path;
+  WalkPathResult wpres;
+  while (cur != end && *cur == '/') {
     ++cur;
   }
-  if (!*cur) {
-    // we are done!
-    return parent;
+  if (cur == end) {
+    wpres.pathIsRoot = true;
+    if (!returnParent) {
+      wpres.dirent = superBlock_.rootdir;
+    }
+    return wpres;
+  }
+  const char* curend = cur;
+  while (curend != end && *curend != '/') {
+    ++curend;
+  }
+  assert(curend - cur > 0);
+
+  DirEnt parentDirEnt = superBlock_.rootdir;
+  // loop invariant:
+  // - [cur, curend) represents the current path item
+  // - parentDirEnt is for the parent direcotry of it.
+  // exit the loop if there is no more path items
+  const char* next;
+  while (true) {
+    next = curend;
+    while (next != end && *next == '/') {
+      ++next;
+    }
+    if (next == end) { // no more path item
+      break;
+    }
+    // walk the path one level
+    parentDirEnt = parentDirEnt.findEnt(cur, curend - cur);
+    if (!parentDirEnt) {
+      assert(!wpres.dirent);
+      return wpres;
+    }
+    cur = next;
+    curend = cur;
+    while (curend != end && *curend != '/') {
+      ++curend;
+    }
   }
 
-  if (!parent.isdir()) {
-    printf("Directory required!\n");
-    return DirEnt();
+  if (returnParent) {
+    wpres.dirent = parentDirEnt;
+    wpres.lastItemPtr = cur;
+    wpres.lastItemLen = curend - cur;
+  } else {
+    wpres.dirent = parentDirEnt.findEnt(cur, curend - cur); 
   }
+  return wpres;
+}
 
-  const char *nxt = cur;
-  while (*nxt != '/' && *nxt != '\0') {
-    ++nxt;
+DirEnt SimFs::createFile(const char* path) {
+  auto wpres = walkPath(path, strlen(path), true);
+  if (!wpres.dirent) { // fail to walk to the parent directory
+    return wpres.dirent;
   }
-  auto child = parent.findEnt(cur, nxt - cur);
-  if (!child) {
-    return child;
-  }
-  return walkPath(child, nxt);
+  /*
+   * TODO: we need pass the path fragment for parent to createFile since so we
+   * can use it to keep the DirEnt on disk up to date.
+   *
+   * It's much better and straightforward if we record the path for an file/dir in
+   * it's DirEnt. The problem here is:
+   * 1. we don't want to store the path on disk since that's a waste of space
+   * 2. we need store the path in DirEnt when it's loaded to memory
+   *
+   * That being said, we would need 2 views of DirEnt:
+   * - an on-disk view WITHOUT the path field
+   * - an in-memory view WITH the path field
+   */
+  return wpres.dirent.createFile(path, wpres.lastItemPtr - path, wpres.lastItemPtr, wpres.lastItemLen);
+}
+
+uint32_t SimFs::allocPhysBlk() {
+	assert(superBlock_.freelist != 0 && "Out of disk space");
+	int ret = superBlock_.freelist;
+	char buf[BLOCK_SIZE];
+
+	// TODO: only need the first 4 bytes
+	readBlock(ret, (uint8_t*) buf);
+	superBlock_.freelist = *(uint32_t*) buf;
+	flushSuperBlock(); // TODO: do this lazily?
+	return ret;
+}
+
+void SimFs::updateRootDirEnt(const DirEnt& newent) {
+	superBlock_.rootdir = newent;
+	flushSuperBlock();
+}
+
+void SimFs::flushSuperBlock() {
+  char buf[BLOCK_SIZE];
+	// TODO: we can avoid writing the whole block
+	memmove(buf, (void*) &superBlock_, sizeof(SuperBlock));
+	writeBlock(0, (const uint8_t*) buf);
+}
+
+void SimFs::writeBlock(int blockId, const uint8_t* buf) {
+	dev_.write(buf, blockIdToSectorNo(blockId), SECTORS_PER_BLOCK);
 }
 
 /*

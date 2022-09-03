@@ -10,6 +10,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 #include <kernel/ide.h>
 
 // max file/subdir name size 63 following by '\0'
@@ -37,6 +38,16 @@ class DirEnt {
  public:
   explicit DirEnt() : ent_type(ET_NOEXIST) {
   }
+
+  // create entry for an empty file
+  explicit DirEnt(const char* name, int namelen, int8_t ent_type) {
+		memmove(this->name, name, namelen);
+		this->name[namelen] = '\0';
+		file_size = 0;
+		memset((void*) blktable, 0, sizeof(blktable));
+		ent_type = ent_type;
+  }
+
   char name[NAME_BUF_SIZE]; // 64 bytes
   uint32_t file_size; // 4 bytes
   uint32_t blktable[IND_BLOCK_IDX_2 + 1]; // 12 * 4 = 48 bytes
@@ -64,6 +75,18 @@ class DirEnt {
   DirEntIterator end() const;
 
   DirEnt findEnt(const char *name, int len) const;
+	int findEntIdx(const char *name, int len) const;
+	// the name should not contains slash and not empty
+	DirEnt createFile(const char *path, int pathlen, const char *name, int namelen) {
+		return createEnt(path, pathlen, name, namelen, ET_FILE);
+  }
+	DirEnt createEnt(const char *path, int pathlen, const char *name, int namelen, int8_t ent_type);
+
+  void flush(const char* path, int pathlen);
+  // assumes the range [pos, pos + size) is completed inside the file
+	int write(int pos, int size, const void* buf);
+  // only support growing the size for now
+	void resize(int newsize);
 
   bool isdir() const {
     return ent_type == ET_DIR;
@@ -73,6 +96,11 @@ class DirEnt {
     assert(logicalBlockId < N_DIRECT_BLOCK); // TODO support large file that have indirct block
     return blktable[logicalBlockId];
   }
+
+  // read the whole block for file offset off
+	void readBlockForOff(int off, char* buf);
+  // write the whole block for file offset off
+	void writeBlockForOff(int off, const char* buf);
 
   // use ent_type == ET_NOEXIST to identify a returned DirEnt does not exist
   operator bool() const {
@@ -151,6 +179,15 @@ class SuperBlock {
 
 static_assert(sizeof(SuperBlock) <= BLOCK_SIZE); // make sure the SuperBlock can be put inside the first block
 
+struct WalkPathResult {
+  DirEnt dirent;
+  bool pathIsRoot = false; // indicate if the path represents the root directory. Note that path like '/////' is count as the root dir
+
+  // not relevant if returnParent is false
+  const char* lastItemPtr = nullptr;
+  int lastItemLen = 0;
+};
+
 class SimFs {
  public:
   // TODO Detect the FS object from path rather than assuming the singleton SimFs instance?
@@ -161,14 +198,23 @@ class SimFs {
   void init();
   // the blockId here is a physical block id
   void readBlock(int blockId, uint8_t buf[], int len = BLOCK_SIZE);
-  // walk path from rootdir
-  DirEnt walkPath(const char* path) {
-    return walkPath(superBlock_.rootdir, path);
-  }
+	void writeBlock(int blockId, const uint8_t* buf);
 
-  // walk path from the specified parent dir
-  // path is relative to parent
-  DirEnt walkPath(const DirEnt& parent, const char* path);
+  // return DirEnt for path
+  DirEnt walkPath(const char* path);
+
+  // if returnParent is true, the returned DirEnt represents the parent of path.
+  // If path is the root dir in this case (there is no parent), the returned DirEnt will be DirEnt() .
+  WalkPathResult walkPath(const char* path, int pathlen, bool returnParent);
+
+  // if the path (file/dir) exists, return the corresponding DirEnt;
+  // otherwise, try to create the file. Return the created DirEnt if succeed and return 
+  // DirEnt() if fail (e.g. if the parent directory does not exist).
+	DirEnt createFile(const char* path);
+	uint32_t allocPhysBlk();
+
+  void updateRootDirEnt(const DirEnt& newent);
+	void flushSuperBlock();
  private:
   static int blockIdToSectorNo(int blockId);
 

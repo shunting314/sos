@@ -12,8 +12,13 @@ int file_open(const char* path, int oflags) {
 		return -1; // fail
 	}
 	auto dent = SimFs::get().walkPath(path);
+  if (!dent && (oflags & FD_FLAG_WR)) {
+    // try to create the file
+    dent = SimFs::get().createFile(path);
+  }
+
 	if (!dent) {
-		return -1; // file does not exist
+		return -1; // file does not exist for read or fail to create for write
 	}
 	int fd = UserProcess::current()->allocFd(path, rwflags);
 	return fd;
@@ -28,4 +33,16 @@ int file_read(int fd, void *buf, int nbyte) {
 
 int file_close(int fd) {
   return UserProcess::current()->releaseFd(fd);
+}
+
+int file_write(int fd, const void* buf, int nbyte) {
+  // TODO need revise this part once we support IO redirection
+  if (fd == 1) {
+    char *s = (char*) buf;
+    for (int i = 0; i < nbyte; ++i) {
+      putchar(s[i]);
+    }
+    return nbyte;
+  }
+  return UserProcess::current()->getFdptr(fd)->write(buf, nbyte);
 }

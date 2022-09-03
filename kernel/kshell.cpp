@@ -306,7 +306,7 @@ void kshell() {
   // calls kshell again. Without this flag, kernel will repeatedly execute the
   // command.
   static int first_time = 1;
-  char line[1024] = "launch test_readfile";
+  char line[1024] = "launch test_writefile";
   if (first_time) {
     first_time = 0;
     handleLine(line);

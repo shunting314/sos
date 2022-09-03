@@ -69,6 +69,7 @@ void FileDesc::freeme() {
  * the next byte of data.
  */
 int FileDesc::read(void *buf, int nbyte) {
+  // TODO: move majority of this code to class DirEnt
   assert(nbyte > 0);
   auto dent = SimFs::get().walkPath(path_); // TODO: should cache dent
   assert(dent);
@@ -104,4 +105,16 @@ int FileDesc::read(void *buf, int nbyte) {
     }
   }
   return tot_read;
+}
+
+int FileDesc::write(const void *buf, int nbyte) {
+  auto dent = SimFs::get().walkPath(path_);
+  assert(dent);
+
+  if (off_ + nbyte > dent.file_size) {
+    dent.resize(off_ + nbyte);
+    dent.flush(path_, strlen(path_));
+  }
+  dent.write(off_, nbyte, buf);
+  return nbyte;
 }
