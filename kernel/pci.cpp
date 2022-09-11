@@ -1,5 +1,6 @@
 #include <kernel/pci.h>
 #include <kernel/nic/nic.h>
+#include <kernel/usb/usb.h>
 
 Port32Bit pci_addr_port(PORT_CONFIG_ADDRESS);
 Port32Bit pci_data_port(PORT_CONFIG_DATA);
@@ -57,6 +58,21 @@ void collect_pci_devices() {
     if (_full_class_code == FullClassCode::ETHERNET_CONTROLLER) {
       assert(!ethernet_controller_pci_func && "found multiple ethernet controller");
       ethernet_controller_pci_func = func;
+    } else if (_full_class_code == FullClassCode::USB_CONTROLLER) {
+      switch (func.prog_if()) {
+      case 0x00:
+        uhci_func = func;
+        break;
+      case 0x10:
+        ohci_func = func;
+        break;
+      case 0x20:
+        ehci_func = func;
+        break;
+      case 0x30:
+        xhci_func = func;
+        break;
+      }
     }
   });
   assert(ethernet_controller_pci_func && "ethernet controller not found");
@@ -95,4 +111,17 @@ Bar PCIFunction::getBar(int idx) const {
   // recover original value
   set_bar(ret.get_idx(), ret.get_raw());
   return ret;
+}
+
+Bar PCIFunction::getSoleBar() const {
+  Bar retbar;
+  for (int i = 0; i < 6; ++i) {
+    auto curbar = getBar(i);
+    if (curbar) {
+      assert(!retbar);
+      retbar = curbar;
+    }
+  }
+  assert(retbar);
+  return retbar;
 }

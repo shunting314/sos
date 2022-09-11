@@ -18,8 +18,9 @@ extern Port32Bit pci_data_port;
 #define CONFIG_OFF_VENDOR_ID 0x0 // 2 byte size
 #define CONFIG_OFF_DEVICE_ID 0x2 // 2 byte size
 #define CONFIG_OFF_COMMAND_STATUS 0x4
-#define CONFIG_OFF_CLASS_CODE 0xB // 1 byte size
+#define CONFIG_OFF_PROG_IF 0x9 // 1 byte size
 #define CONFIG_OFF_SUBCLASS_CODE 0xA // 1 byte size
+#define CONFIG_OFF_CLASS_CODE 0xB // 1 byte size
 #define CONFIG_OFF_HEADER_TYPE 0xE // 1 byte size
 #define CONFIG_OFF_BAR0 0x10 // 4 byte size
 #define CONFIG_OFF_BAR1 0x14 // 4 byte size
@@ -28,6 +29,9 @@ extern Port32Bit pci_data_port;
 #define CONFIG_OFF_BAR4 0x20 // 4 byte size
 #define CONFIG_OFF_BAR5 0x14 // 4 byte size
 #define CONFIG_MAX_NUM_BARS 6
+
+#define CONFIG_OFF_INTERRUPT_LINE 0x3C
+#define CONFIG_OFF_INTERRUPT_PIN 0x3D
 
 #define IOBAR_INFO_BITS_MASK 0x3
 #define MEMBAR_INFO_BITS_MASK 0xF
@@ -65,6 +69,7 @@ enum class FullClassCode {
   HOST_BRIDGE = 0x0600,
   ISA_BRIDGE = 0x0601,
   OTHER_BRIDGE = 0x0680,
+  USB_CONTROLLER = 0xC03,
 };
 
 /*
@@ -92,6 +97,9 @@ static inline const char* get_class_desc(uint16_t full_class_code) {
       return "ISA Bridge";
     case FullClassCode::OTHER_BRIDGE:
       return "Other Bridge";
+      // class 0x0C: Serial Bus Controller
+    case FullClassCode::USB_CONTROLLER:
+      return "USB Controlelr";
     default:
       break;
   }
@@ -130,6 +138,14 @@ class Bar {
   uint32_t get_size() const {
     return size_;
   }
+
+  bool isMem() const {
+    return is_mem_;
+  }
+
+  bool isIO() const {
+    return !isMem();
+  }
  private:
   uint32_t clear_info_bits(uint32_t raw) {
     if (is_mem_) {
@@ -162,12 +178,22 @@ class PCIFunction {
   void dump() const;
 
   Bar getBar(int idx) const;
+  // succeed only if the device has a single valid Bar and return that Bar.
+  // assert fail otherwise.
+  Bar getSoleBar() const;
   // return a 2 bytes word whose MSB is the class code and LSB is the subclass code.
   uint16_t full_class_code() const {
     auto _class_code = class_code();
     auto _subclass_code = subclass_code();
     return ((uint16_t) _class_code << 8) | _subclass_code;
   }
+
+  void dumpBars() const {
+    for (int i = 0; i < 6; ++i) {
+      getBar(i).print();
+    }
+  }
+
  public:
   /* APIs handling configuration space */
   uint8_t header_type() const {
@@ -188,6 +214,18 @@ class PCIFunction {
 
   uint8_t subclass_code() const {
     return read_config<uint8_t>(CONFIG_OFF_SUBCLASS_CODE);
+  }
+
+  uint8_t prog_if() const {
+    return read_config<uint8_t>(CONFIG_OFF_PROG_IF);
+  }
+
+  uint8_t interrupt_line() const {
+    return read_config<uint8_t>(CONFIG_OFF_INTERRUPT_LINE);
+  }
+
+  uint8_t interrupt_pin() const {
+    return read_config<uint8_t>(CONFIG_OFF_INTERRUPT_PIN);
   }
 
   uint32_t bar(uint8_t idx) const {

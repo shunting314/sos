@@ -40,6 +40,11 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
   if (intNum == 32 + 14 || intNum == 32 + 15) {
     framePtr->returnFromInterrupt();
   }
+  if (intNum == 32 + 10) {
+    // simulating UHCI and attaching a MSD device will cause this interrupt
+    // happens during kernel initialization. Ignore for now.
+    framePtr->returnFromInterrupt();
+  }
   if (intNum == 48) {
 #if 0
     printf("Received a system call: eax 0x%x, args ebx 0x%x ecx 0x%x edx 0x%x esi 0x%x edi 0x%x\n",

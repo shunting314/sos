@@ -10,6 +10,7 @@
 #include <kernel/init.h>
 #include <kernel/sleep.h>
 #include <kernel/pit.h>
+#include <kernel/usb/usb.h>
 #include <stdio.h>
 
 #ifdef TEST_LARGE_KERNEL
@@ -39,5 +40,6 @@ extern "C" void kernel_main() {
     msleep(1000);
   }
 #endif
+  usb_init();
   kshell();
 }

@@ -7,7 +7,7 @@
 
 class Port8Bit {
  public:
-  explicit Port8Bit(uint16_t port) : port_(port) { }
+  explicit Port8Bit(uint16_t port = -1) : port_(port) { }
 
   uint8_t read() {
     uint8_t ret;
@@ -29,7 +29,7 @@ class Port8Bit {
 
 class Port16Bit {
  public:
-  explicit Port16Bit(uint16_t port) : port_(port) { }
+  explicit Port16Bit(uint16_t port = -1) : port_(port) { }
 
   uint16_t read() {
     uint16_t ret;
@@ -55,7 +55,7 @@ class Port16Bit {
 
 class Port32Bit {
  public:
-  explicit Port32Bit(uint16_t port) : port_(port) { }
+  explicit Port32Bit(uint16_t port = -1) : port_(port) { }
 
   uint32_t read() {
     uint32_t ret;
