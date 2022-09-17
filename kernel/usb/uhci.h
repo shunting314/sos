@@ -1,6 +1,9 @@
 #pragma once
 
 #include <kernel/pci.h>
+#include <kernel/sleep.h>
+#include <kernel/phys_page.h>
+#include <string.h>
 
 enum class UHCIRegOff {
   CMD = 0, // command, 2 bytes
@@ -21,16 +24,42 @@ class UHCIDriver {
     }
   }
 
+  void setupFramePtrs();
+
   void reset() {
-    printf("STS 0x%x\n", getStatus());
-    printf("SOFMOD 0x%x\n", getSOFMod());
-    printf("SC1 0x%x\n", getSC1());
-    printf("SC2 0x%x\n", getSC2());
-    printf("UHCIDriver reset not fully implemented yet\n");
+    assert(!(getCmd() & 1) && (getStatus() & (1 << 5)) && "The controller should be in a halted state");
+    setCmdFlags(1 << 2); // global reset
+    msleep(10); // wait for 10 ms
+    clearCmdFlags(1 << 2); // reset global reset flag
+
+    // setup the frame list
+    frame_page_addr_ = alloc_phys_page();
+    memset((void*) frame_page_addr_, 0, 4096);
+    setupFramePtrs();
+    setFrameListBaseAddr(frame_page_addr_);
+
+    // start the controller
+    setCmdFlags(1 << 0);
+    assert(!(getStatus() & (1 << 5)) && "The controller halted flag should be off");
+
+    // assume that port1 has device attached but port2 does not.
+    // TODO: we should have the ability to detect device dynamically
+    assert(getSC1() == 0x83); // bit 7 is reserved and should always be 1
+    assert(getSC2() == 0x80);
   }
 
   uint16_t getCmd() {
     return cmd_port_.read();
+  }
+
+  // only clear the specified flags
+  void clearCmdFlags(uint16_t flags) {
+    setCmd(getCmd() & ~flags);
+  }
+
+  // only set the specified flags
+  void setCmdFlags(uint16_t flags) {
+    setCmd(getCmd() | flags);
   }
 
   void setCmd(uint16_t cmd) {
@@ -43,6 +72,14 @@ class UHCIDriver {
 
   void setStatus(uint16_t status) {
     status_port_.write(status);
+  }
+
+  void setFrnum(uint16_t frnum) {
+    frnum_port_.write(frnum);
+  }
+
+  void setFrameListBaseAddr(uint32_t frameListBaseAddr) {
+    flbaseaddr_port_.write(frameListBaseAddr);
   }
 
   uint8_t getSOFMod() {
@@ -68,6 +105,8 @@ class UHCIDriver {
 
     cmd_port_ = Port16Bit(iobar_.get_addr() + (int) UHCIRegOff::CMD);
     status_port_ = Port16Bit(iobar_.get_addr() + (int) UHCIRegOff::STS);
+    flbaseaddr_port_ = Port32Bit(iobar_.get_addr() + (int) UHCIRegOff::FLBASEADDR);
+    frnum_port_ = Port16Bit(iobar_.get_addr() + (int) UHCIRegOff::FRNUM);
     sofmod_port_ = Port8Bit(iobar_.get_addr() + (int) UHCIRegOff::SOFMOD);
     sc1_port_ = Port16Bit(iobar_.get_addr() + (int) UHCIRegOff::PORTSC1);
     sc2_port_ = Port16Bit(iobar_.get_addr() + (int) UHCIRegOff::PORTSC2);
@@ -78,7 +117,11 @@ class UHCIDriver {
 
   Port16Bit cmd_port_;
   Port16Bit status_port_;
+  Port32Bit flbaseaddr_port_;
+  Port16Bit frnum_port_;
   Port8Bit sofmod_port_;
   Port16Bit sc1_port_;
   Port16Bit sc2_port_;
+
+  uint32_t frame_page_addr_;
 };
