@@ -3,6 +3,7 @@
 #include <kernel/pci.h>
 #include <kernel/sleep.h>
 #include <kernel/phys_page.h>
+#include <kernel/usb/usb_proto.h>
 #include <string.h>
 
 enum class UHCIRegOff {
@@ -26,6 +27,23 @@ class UHCIDriver {
 
   void setupFramePtrs();
 
+  void resetPort(Port16Bit ioPort) {
+    // refer to the usb book about how to reset UHCI root hub ports.
+    // Note: UHCI root hub ports must be reset separately even though
+    // a global reset has already been done.
+    ioPort.write(ioPort.read() | (1 << 9)); // set the reset bit
+    msleep(50); // wait for 50 ms
+    ioPort.write(ioPort.read() & ~(1 << 9)); // clear the reset bit
+
+    // clear the connect status change bit. Bit a write clear bit, so we
+    // have to write a 1 to clear it
+    ioPort.write(ioPort.read() | (1 << 1));
+
+    // set the enable bit
+    ioPort.write(ioPort.read() | (1 << 2));
+    assert(ioPort.read() & (1 << 2)); // make sure the port is enabled
+  }
+
   void reset() {
     assert(!(getCmd() & 1) && (getStatus() & (1 << 5)) && "The controller should be in a halted state");
     setCmdFlags(1 << 2); // global reset
@@ -46,6 +64,7 @@ class UHCIDriver {
     // TODO: we should have the ability to detect device dynamically
     assert(getSC1() == 0x83); // bit 7 is reserved and should always be 1
     assert(getSC2() == 0x80);
+    resetPort(sc1_port_);
   }
 
   uint16_t getCmd() {
@@ -97,6 +116,12 @@ class UHCIDriver {
   uint16_t getSC2() {
     return sc2_port_.read();
   }
+
+ public:
+  // APIs talking to USB devices
+  // TODO: refactor to make the controller agnostic part shared by different
+  // controllers.
+  DeviceDescriptor getDeviceDescriptor(bool use_default_addr=true);
  private:
   void setupBar() {
     iobar_ = pci_func_.getSoleBar();
