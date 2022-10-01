@@ -8,6 +8,13 @@ class DeviceDescriptor {
   uint8_t bDeviceClass;
   uint8_t bDeviceSubClass;
   uint8_t bDeviceProtocol;
+  // USB3 spec says the max packet size should be 2^bMaxPacketSize0;
+  // However the usb osdev wiki says this field specifies the max packet size
+  // directly.
+  //
+  // For a MSD QEMU simulated, this field returns 8. I can read a 8 bytes packet but
+  // not 18 bytes packet for the DeviceDescriptor. So I think for this device
+  // it conforms to what osdev wiki says.
   uint8_t bMaxPacketSize0; // max packet size for endpoint 0
   uint16_t idVendor;
   uint16_t idProduct;
@@ -34,7 +41,9 @@ enum class DescriptorType : uint8_t {
 };
 
 enum class DeviceRequestCode : uint8_t {
+  SET_ADDRESS = 5,
   GET_DESCRIPTOR = 6,
+  SET_CONFIGURATION = 9,
 };
 
 // a device request is the payload of the Setup packet.
@@ -52,6 +61,11 @@ class DeviceRequest {
       wIndex(_wIndex),
       wLength(_wLength) {
   }
+
+  void print() const {
+    printf("DeviceRequest: type 0x%x, req %d, value 0x%x, idx 0x%x, len %d\n", bmRequestType, bRequest, wValue, wIndex, wLength);
+  }
+
   uint8_t bmRequestType;
   uint8_t bRequest; // specific request type. Check DeviceRequestCode
   uint16_t wValue;

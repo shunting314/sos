@@ -1,5 +1,6 @@
 #include <kernel/usb/uhci.h>
 #include <kernel/usb/usb_proto.h>
+#include <kernel/usb/usb_device.h>
 
 #define PID_SETUP 0x2D
 #define PID_IN 0x69
@@ -174,59 +175,61 @@ void UHCIDriver::setupFramePtrs() {
   }
 }
 
-DeviceDescriptor UHCIDriver::getDeviceDescriptor(bool use_default_addr) {
-  assert(use_default_addr); // TODO: haven't assigned the device a real address yet
-  uint8_t device_address = 0;
-  DeviceDescriptor device_desc;
-  memset(&device_desc, 0, sizeof(device_desc));
-  int maxLength = 8;
-  TransferDescriptor* tds = reserveTDs(3);
-  auto& reqTD = tds[0];
-  auto& respTD = tds[1];
-  auto& statusTD = tds[2];
+void UHCIDriver::sendDeviceRequest(USBDevice* device, DeviceRequest* req, void *buf) {
+  int maxPacketLength = device->getMaxPacketLength();
+  int maxLength = req->wLength;
+  assert((maxLength > 0 && buf) || (maxLength == 0 && !buf));
+  uint8_t reqType = req->bmRequestType;
 
-  DeviceRequest req(
-    0x80 /* bmRequestType */,
-    (uint8_t) DeviceRequestCode::GET_DESCRIPTOR,
-    (uint16_t) DescriptorType::DEVICE << 8,
-    0,
-    maxLength
-  );
+  // need 2 more for the SETUP and STATUS packets
+  int ntd = (maxLength + maxPacketLength - 1) / maxPacketLength + 2;
+  TransferDescriptor* tds = reserveTDs(ntd);
+  TransferDescriptor* reqTD = &tds[0];
 
-  // TODO: anyway to have a common API to setup TDs for a transaction?
-  reqTD = TransferDescriptor(
-    &respTD,
+  *reqTD = TransferDescriptor(
+    &tds[1],
     PID_SETUP,
-    device_address /* device_address */,
+    device->getAddr(),
     0 /* endpoint */,
     0 /* data_toggle */,
-    maxLength - 1 /* max_len_off1 */,
-    (uint32_t) &req /* buffer_pointer */
+    sizeof(*req) - 1, /* max_len_off1 */
+    (uint32_t) req /* buffer-pointer */
   );
 
-  respTD = TransferDescriptor(
-    &statusTD,
-    PID_IN,
-    device_address /* device_address */,
-    0 /* endpoint */,
-    1 /* data_toggle */,
-    maxLength - 1 /* max_len_off1 */,
-    (uint32_t) &device_desc /* buffer_pointer */
-  );
+  // payloads
+  uint32_t off = 0, len;
+  uint8_t payload_pid = (reqType & 0x80) ? PID_IN : PID_OUT;
+  for (int i = 1; i < ntd - 1; ++i) {
+    TransferDescriptor* cur = &tds[i];
+    int len = min(maxPacketLength, maxLength - off);
+    assert(len > 0);
+    *cur = TransferDescriptor(
+      cur + 1,
+      payload_pid,
+      device->getAddr(),
+      0 /* endpoint */,
+      (i & 1) /* data toggle */,
+      len - 1 /* max_len_off1 */,
+      (uint32_t) buf + off
+    );
+    off += len;
+  }
 
-  statusTD = TransferDescriptor(
+  // status
+  TransferDescriptor *statusTD = &tds[ntd - 1];
+  uint8_t status_pid = (reqType & 0x80) ? PID_OUT : PID_IN;
+  *statusTD = TransferDescriptor(
     nullptr,
-    PID_OUT,
-    device_address /* device_address */,
+    status_pid,
+    device->getAddr() /* device_address */,
     0 /* endpoint */,
     1 /* data_toggle */,
     0x7FF /* max_len_off1 */,
     0 /* buffer_pointer */
   );
-  globalQueue.setElementLinkPtr(&reqTD); // start processing
-  while (statusTD.isActive()) {
+  globalQueue.setElementLinkPtr(reqTD); // start processing
+  while (statusTD->isActive()) {
     msleep(1);
   }
   assert(!globalQueue.getElementLinkPtr());
-  return device_desc;
 }

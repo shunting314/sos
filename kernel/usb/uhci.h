@@ -16,6 +16,8 @@ enum class UHCIRegOff {
   PORTSC2 = 18, // port 2 status/control, 2 bytes
 };
 
+class USBDevice;
+
 class UHCIDriver {
  public:
   explicit UHCIDriver(const PCIFunction& pci_func = PCIFunction()) : pci_func_(pci_func) {
@@ -119,9 +121,14 @@ class UHCIDriver {
 
  public:
   // APIs talking to USB devices
-  // TODO: refactor to make the controller agnostic part shared by different
-  // controllers.
-  DeviceDescriptor getDeviceDescriptor(bool use_default_addr=true);
+  void sendDeviceRequest(USBDevice* device, DeviceRequest* req, void *buf);
+
+  // a simple implementation that only do allocation but no reclamation
+  uint8_t acquireAvailAddr() const {
+    static uint8_t next_addr = 1;
+    assert(next_addr > 0 && next_addr <= 127 && "No more address available");
+    return next_addr++;
+  }
  private:
   void setupBar() {
     iobar_ = pci_func_.getSoleBar();
