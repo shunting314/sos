@@ -36,6 +36,32 @@ class USBDevice {
     return desc;
   }
 
+  ConfigurationDescriptor getConfigurationDescriptor() {
+    ConfigurationDescriptor desc;
+    DeviceRequest req = createGetConfigurationDescriptorRequest(sizeof(desc));
+    controller_driver_->sendDeviceRequest(this, &req, &desc);
+    return desc;
+  }
+
+  void setConfiguration(uint8_t configVal) {
+    DeviceRequest req = createSetConfigurationRequest(configVal);
+    controller_driver_->sendDeviceRequest(this, &req, nullptr);
+  }
+
+  uint8_t getConfiguration() {
+    uint8_t configVal;
+    DeviceRequest req = createGetConfigurationRequest();
+    controller_driver_->sendDeviceRequest(this, &req, &configVal);
+    return configVal;
+  }
+
+  uint16_t getMaxPacketLength() {
+    // TODO: 8 is quite conservative. Can we use a larger value here?
+    return 8;
+  }
+
+  uint8_t getAddr() const { return addr_; }
+ private:
   // short hands to create DeviceRequest
   DeviceRequest createGetDeviceDescriptorRequest() {
     return DeviceRequest(
@@ -44,6 +70,38 @@ class USBDevice {
       (uint16_t) DescriptorType::DEVICE << 8,
       0,
       sizeof(DeviceDescriptor)
+    );
+  }
+
+  // the conguration descriptor returned can be followed by interface and endpoint
+  // descriptors. So the length can be larger than sizeof(ConfigurationDescriptor)
+  DeviceRequest createGetConfigurationDescriptorRequest(uint16_t length) {
+    return DeviceRequest(
+      0x80,
+      (uint8_t) DeviceRequestCode::GET_DESCRIPTOR,
+      (uint16_t) DescriptorType::CONFIGURATION << 8,
+      0,
+      length
+    );
+  }
+
+  DeviceRequest createSetConfigurationRequest(uint8_t config_val) {
+    return DeviceRequest(
+      0x0,
+      (uint8_t) DeviceRequestCode::SET_CONFIGURATION,
+      (uint16_t) config_val,
+      0,
+      0
+    );
+  }
+
+  DeviceRequest createGetConfigurationRequest() {
+    return DeviceRequest(
+      0x80,
+      (uint8_t) DeviceRequestCode::GET_CONFIGURATION,
+      0,
+      0,
+      1
     );
   }
 
@@ -57,13 +115,6 @@ class USBDevice {
     );
   }
 
-  uint16_t getMaxPacketLength() {
-    // TODO: 8 is quite conservative. Can we use a larger value here?
-    return 8;
-  }
-
-  uint8_t getAddr() const { return addr_; }
- private:
   ControllerDriver* controller_driver_;
   uint8_t addr_; // device address
 };

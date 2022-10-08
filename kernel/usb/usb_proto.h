@@ -1,5 +1,25 @@
 #pragma once
 
+#include <assert.h>
+#include <stdint.h>
+
+class ConfigurationDescriptor {
+ public:
+  uint8_t bLength;
+  uint8_t bDescriptorType;
+  // total length of data returned for this descriptor and the associated
+  // interface, enterpointer descriptors etc.
+  uint16_t wTotalLength;
+  uint8_t bNumInterfaces;
+  uint8_t bConfigurationValue;
+  // index of string descriptor describing this configuration
+  uint8_t iConfiguration;
+  uint8_t bmAttributes;
+  uint8_t bMaxPower;
+} __attribute__((packed));
+
+static_assert(sizeof(ConfigurationDescriptor) == 9);
+
 class DeviceDescriptor {
  public:
   uint8_t bLength;
@@ -43,6 +63,7 @@ enum class DescriptorType : uint8_t {
 enum class DeviceRequestCode : uint8_t {
   SET_ADDRESS = 5,
   GET_DESCRIPTOR = 6,
+  GET_CONFIGURATION = 8,
   SET_CONFIGURATION = 9,
 };
 

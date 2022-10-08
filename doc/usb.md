@@ -4,6 +4,7 @@
 - [Intel UHCI Spec](ftp://ftp.netbsd.org/pub/NetBSD/misc/blymn/uhci11d.pdf)
 - [USB: The Universal Serial Bus](https://www.amazon.com/USB-Universal-Serial-Bus-8/dp/1717425364): a book about USB
 - [USB - osdev](https://wiki.osdev.org/Universal_Serial_Bus): an awesome doc about USB.
+- [USB Mass Storage Class Devices - osdev](https://wiki.osdev.org/USB_Mass_Storage_Class_Devices): referenced from the USB osdev wiki. The page is too simple.
 - [USB1 spec](x): I don't find the spec for USB1
 - [USB2 Spec](https://www.usb.org/document-library/usb-20-specification)
 - [USB3 Spec](https://www.usb.org/document-library/usb-32-revision-11-june-2022): roughly read.

@@ -24,6 +24,19 @@ void setup_uhci() {
   assert(device_desc.bLength == 18);
   assert(device_desc.bMaxPacketSize0 == device_desc_0.bMaxPacketSize0);
   assert(device_desc.bNumConfigurations == device_desc_0.bNumConfigurations);
+
+  ConfigurationDescriptor config_desc = dev.getConfigurationDescriptor();
+  assert(config_desc.bLength == sizeof(ConfigurationDescriptor));
+  assert(config_desc.bDescriptorType == (int) DescriptorType::CONFIGURATION);
+  assert(config_desc.wTotalLength > config_desc.bLength);
+  assert(config_desc.bNumInterfaces > 0);
+  assert(config_desc.bConfigurationValue > 0);
+
+  dev.setConfiguration(config_desc.bConfigurationValue);
+  // verify that the device is in a configured state, i.e., the config value
+  // is > 0
+  assert(dev.getConfiguration() == config_desc.bConfigurationValue);
+  printf("The device is configured with config value %d\n", config_desc.bConfigurationValue);
 }
 
 void usb_init() {
