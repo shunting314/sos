@@ -3,8 +3,98 @@
 #include <assert.h>
 #include <stdint.h>
 
+// for the GET_DESCRIPTOR device request
+// copied from the osdev wiki for usb
+enum class DescriptorType : uint8_t {
+  DEVICE = 1,
+  CONFIGURATION = 2,
+  STRING = 3,
+  INTERFACE = 4,
+  ENDPOINT = 5,
+  DEVICE_QUALIFIER = 6,
+  OTHER_SPEED_CONFIGURATION = 7,
+  INTERFACE_POWER = 8,
+};
+
+class EndpointDescriptor {
+ public:
+  EndpointDescriptor() : bLength(0) {
+  }
+
+  operator bool() const {
+    return bLength != 0;
+  }
+  void print() const {
+    ensure();
+    printf("ENDPOINT DESC:\n"
+      "  addr 0x%x, attr 0x%x, max packet size %d\n",
+      bEndpointAddress, bmAttributes, wMaxPacketSize);
+  }
+  void ensure() const {
+    assert(bLength == sizeof(EndpointDescriptor));
+    assert(bDescriptorType == (uint8_t) DescriptorType::ENDPOINT);
+  }
+
+  uint8_t bLength;
+  uint8_t bDescriptorType;
+  // bit 3..0 the endpoint nubmer
+  // bit 6..4, reserved, reset to 0
+  // bit 7: direction, ignore for control endpoints.
+  //        0 = out endpoint
+  //        1 = in endpoint
+  uint8_t bEndpointAddress;
+  // bit 1..0: transfer type
+  // 00 = control
+  // 01 = isochronous
+  // 10 = bulk
+  // 11 = interrupt.
+  // Check usb3 spec 9.6.6 for explanation of other bits.
+  uint8_t bmAttributes;
+  uint16_t wMaxPacketSize;
+  uint8_t bInterval;
+} __attribute__((packed));
+
+static_assert(sizeof(EndpointDescriptor) == 7);
+
+class InterfaceDescriptor {
+ public:
+  void print() const {
+    ensure();
+    printf("INTERFACE DESC:\n"
+      "  interface no %d, alter setting %d, num endpoints %d\n"
+      "  class 0x%x, subclss 0x%x, protocol 0x%x\n"
+      "  iInterface %d\n",
+      bInterfaceNumber, bAlternateSetting, bNumEndpoints,
+      bInterfaceClass, bInterfaceSubClass, bInterfaceProtocol,
+      iInterface);
+  }
+  void ensure() const {
+    assert(bLength == sizeof(InterfaceDescriptor));
+    assert(bDescriptorType == (uint8_t) DescriptorType::INTERFACE);
+  }
+  uint8_t bLength;
+  uint8_t bDescriptorType;
+  uint8_t bInterfaceNumber;
+  uint8_t bAlternateSetting;
+  // number of endpoints used by the interface (excluding the default control pipe).
+  uint8_t bNumEndpoints;
+  uint8_t bInterfaceClass;
+  uint8_t bInterfaceSubClass;
+  uint8_t bInterfaceProtocol;
+  // index of string descriptor describing this interface
+  uint8_t iInterface;
+};
+
+static_assert(sizeof(InterfaceDescriptor) == 9);
+
 class ConfigurationDescriptor {
  public:
+  void print() const {
+    printf("CONFIG DESC:\n"
+      "  tot len %d, num interface %d, config val %d\n",
+      wTotalLength, bNumInterfaces, bConfigurationValue);
+  }
+
   uint8_t bLength;
   uint8_t bDescriptorType;
   // total length of data returned for this descriptor and the associated
@@ -46,19 +136,6 @@ class DeviceDescriptor {
 };
 
 static_assert(sizeof(DeviceDescriptor) == 18);
-
-// for the GET_DESCRIPTOR device request
-// copied from the osdev wiki for usb
-enum class DescriptorType : uint8_t {
-  DEVICE = 1,
-  CONFIGURATION = 2,
-  STRING = 3,
-  INTERFACE = 4,
-  ENDPOINT = 5,
-  DEVICE_QUALIFIER = 6,
-  OTHER_SPEED_CONFIGURATION = 7,
-  INTERFACE_POWER = 8,
-};
 
 enum class DeviceRequestCode : uint8_t {
   SET_ADDRESS = 5,

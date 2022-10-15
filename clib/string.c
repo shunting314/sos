@@ -29,6 +29,21 @@ void *memset(void *va, int c, uint32_t size) {
   return va; 
 }
 
+int memcmp(const void* _s1, const void *_s2, int n) {
+  const uint8_t* s1 = (const uint8_t*) _s1;
+  const uint8_t* s2 = (const uint8_t*) _s2;
+  assert(n >= 0);
+
+  for (int i = 0; i < n; ++i) {
+    if (*s1 != *s2) {
+      return (*s1) - (*s2);
+    }
+    ++s1;
+    ++s2;
+  }
+  return 0;
+}
+
 int strcmp(const char *s, const char *t) {
   while (*s && *t && *s == *t) {
     ++s;
@@ -43,6 +58,10 @@ int strncmp(const char *s, const char *t, int len) {
   for (int i = 0; i < len; ++i) {
     if (*s != *t) {
       return (*s) - (*t);
+    }
+    // don't compare beyond '\0'
+    if (!*s) {
+      return 0;
     }
     ++s;
     ++t;

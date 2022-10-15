@@ -2,6 +2,7 @@
 #include <kernel/usb/uhci.h>
 #include <kernel/usb/usb_proto.h>
 #include <kernel/usb/usb_device.h>
+#include <kernel/usb/msd.h>
 
 // for usb initialization
 PCIFunction uhci_func, ohci_func, ehci_func, xhci_func;
@@ -37,6 +38,8 @@ void setup_uhci() {
   // is > 0
   assert(dev.getConfiguration() == config_desc.bConfigurationValue);
   printf("The device is configured with config value %d\n", config_desc.bConfigurationValue);
+
+  dev.collectEndpointDescriptors();
 }
 
 void usb_init() {
