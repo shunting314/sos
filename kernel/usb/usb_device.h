@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <kernel/usb/usb_proto.h>
+#include <kernel/scsi.h>
 
 // TODO: use some controller driver base class rather than UHCIDriver
 #define ControllerDriver UHCIDriver
@@ -82,6 +83,7 @@ class USBDevice {
       InterfaceDescriptor* ifdesc_ptr = (InterfaceDescriptor*) (buf + off);
       ifdesc_ptr->print(); // ensure the type and length inside print method
       off += len;
+      visitInterfaceDesc(ifdesc_ptr);
 
       // NOTE: default control pipe does not show up in the endpoint descriptor list.
       for (int ep_idx = 0; ep_idx < ifdesc_ptr->bNumEndpoints; ++ep_idx) {
@@ -174,6 +176,16 @@ class USBDevice {
     );
   }
 
+  void visitInterfaceDesc(InterfaceDescriptor* descPtr) {
+    // TODO: we only support MSD so far
+    assert(descPtr->bInterfaceClass == 0x08); // MASS STORAGE class
+    // 0x06 is the subclass code USB-IF assigns to SCSI. The definition of
+    // SCSI command sets is out of the scope of USB spec. Need refer to SCSI
+    // spec to understand how to setup the command in a CommandBlockWrapper
+    assert(descPtr->bInterfaceSubClass == 0x06);
+    assert(descPtr->bInterfaceProtocol == 0x50); // BULK-ONLY Transport
+  }
+
   void visitEndpointDesc(EndpointDescriptor* descPtr) {
     assert((descPtr->bmAttributes & 3) == 2 && "Only expect bulk endpoint so far");
     if (descPtr->bEndpointAddress & 0x80) {
@@ -186,11 +198,13 @@ class USBDevice {
       bulkOut_ = *descPtr;
     }
   }
-
+ protected:
   ControllerDriver* controller_driver_;
   uint8_t addr_; // device address
 
   // TODO: There are specific to MSD. Should move them to a MSD specific class
+  uint32_t bulkOutDataToggle_ = 0;
   EndpointDescriptor bulkOut_;
+  uint32_t bulkInDataToggle_ = 0;
   EndpointDescriptor bulkIn_;
 };

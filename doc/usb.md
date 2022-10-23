@@ -1,3 +1,6 @@
+# Mass Storage Device (MSD)
+USB defines CommandBlockWrapper to wrap a command for MSD device. The command set is decided by the interface sub class code. Assume the interface sub class code is 0x06 which is for SCSI. The SCSI command set is defined out of USB spec. Need refer to SCSI spec to understand the command set.
+
 # Reference
 - [Host Controller Interface - wikipedia](https://en.wikipedia.org/wiki/Host_controller_interface_(USB,_Firewire))
 - [UHCI - osdev](https://wiki.osdev.org/Universal_Host_Controller_Interface): this doc simply lists registers and data structures. Good for reference. But still need refer to the UHCI spec for details.

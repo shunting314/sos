@@ -13,7 +13,8 @@ void setup_uhci() {
   uhci_driver = UHCIDriver(uhci_func);
   uhci_driver.reset();
 
-  USBDevice dev(&uhci_driver);
+  // TODO: we should not assume a mass storage device but detect the device type.
+  MassStorageDevice dev(&uhci_driver);
   DeviceDescriptor device_desc_0 = dev.getDeviceDescriptor();
   assert(device_desc_0.bLength == 18);
   printf("Endpoint 0 max packet size %d\n", device_desc_0.bMaxPacketSize0);
@@ -40,6 +41,28 @@ void setup_uhci() {
   printf("The device is configured with config value %d\n", config_desc.bConfigurationValue);
 
   dev.collectEndpointDescriptors();
+  dev.readCapacity();
+
+  // read a block from MSD
+  uint8_t blockData[512];
+  assert(sizeof(blockData) >= dev.blockSize());
+  dev.readBlocks(0, 1, blockData);
+  printf("Data from USB:\n");
+  for (int i = 0; i < dev.blockSize(); ++i) {
+    putchar((char) blockData[i]);
+  }
+  printf("\n");
+
+  // write a block to MSD. Disable by default to avoid mutate the media
+  #if 0
+  uint8_t sendData[512];
+  assert(sizeof(sendData) >= dev.blockSize());
+  for (int i = 0; i < dev.blockSize(); ++i) {
+    sendData[i] = (i % 26 + 'a');
+  }
+  dev.writeBlocks(0, 1, sendData);
+  printf("Done writing a block to MSD\n");
+  #endif
 }
 
 void usb_init() {

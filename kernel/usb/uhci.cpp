@@ -103,6 +103,10 @@ class TransferDescriptor {
   bool isActive() {
     return status_ & 0x80;
   }
+
+  uint8_t getStatus() {
+    return status_;
+  }
  private:
   // dword0
   GenericPtr link_pointer_;
@@ -232,4 +236,72 @@ void UHCIDriver::sendDeviceRequest(USBDevice* device, DeviceRequest* req, void *
     msleep(1);
   }
   assert(!globalQueue.getElementLinkPtr());
+}
+
+void UHCIDriver::bulkSend(USBDevice* device, const EndpointDescriptor& desc, uint32_t& toggle, const uint8_t* buf, int bufsize) {
+  int maxPacketSize = desc.wMaxPacketSize;
+  int ntd = (bufsize + maxPacketSize - 1) / maxPacketSize;
+  TransferDescriptor* tds = reserveTDs(ntd);
+  assert(bufsize > 0);
+  int off = 0;
+  for (int i = 0; i < ntd; ++i) {
+    TransferDescriptor* cur = &tds[i];
+    TransferDescriptor* next = (i == ntd - 1 ? nullptr : &tds[i + 1]);
+
+    int cursize = min(maxPacketSize, bufsize - off);
+    *cur = TransferDescriptor(
+      next,
+      PID_OUT,
+      device->getAddr(),
+      desc.bEndpointAddress,
+      (toggle++) % 2,
+      cursize - 1, // NOTE: need off by 1!
+      (uint32_t) buf + off
+    );
+    off += cursize;
+  }
+  assert(off == bufsize);
+  globalQueue.setElementLinkPtr(tds);
+  while (tds[ntd - 1].isActive()) {
+    msleep(1);
+  }
+  assert(!globalQueue.getElementLinkPtr());
+  for (int i = 0; i < ntd; ++i) {
+    assert(tds[i].getStatus() == 0);
+  }
+}
+
+void UHCIDriver::bulkRecv(USBDevice* device, const EndpointDescriptor& desc, uint32_t& toggle, uint8_t* buf, int bufsize) {
+  int maxPacketSize = desc.wMaxPacketSize;
+  int ntd = (bufsize + maxPacketSize - 1) / maxPacketSize;
+  TransferDescriptor* tds = reserveTDs(ntd);
+  assert(bufsize > 0);
+
+  int off = 0;
+  for (int i = 0; i < ntd; ++i) {
+    TransferDescriptor* cur = &tds[i];
+    TransferDescriptor* next = (i == ntd - 1 ? nullptr : &tds[i + 1]);
+
+    int cursize = min(maxPacketSize, bufsize - off);
+    assert(desc.bEndpointAddress & 0x80);
+    *cur = TransferDescriptor(
+      next,
+      PID_IN,
+      device->getAddr(),
+      desc.bEndpointAddress,
+      (toggle++) % 2,
+      cursize - 1, // NOTE: need off by 1!
+      (uint32_t) buf + off
+    );
+    off += cursize;
+  }
+  assert(off == bufsize);
+  globalQueue.setElementLinkPtr(tds);
+  while (tds[ntd - 1].isActive()) {
+    msleep(1);
+  }
+  assert(!globalQueue.getElementLinkPtr());
+  for (int i = 0; i < ntd; ++i) {
+    assert(tds[i].getStatus() == 0);
+  }
 }

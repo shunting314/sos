@@ -48,6 +48,9 @@ struct CommandStatusWrapper {
     printf("CSW: SIG 0x%x, tag 0x%x, data_residue %d, status %d\n", signature, tag, data_residue, status);
   }
 
+  bool success() const {
+    return status == 0;
+  }
   uint32_t signature = CSW_SIGNATURE;
   uint32_t tag;
   uint32_t data_residue;
@@ -55,3 +58,93 @@ struct CommandStatusWrapper {
 } __attribute__((packed));
 
 static_assert(sizeof(CommandStatusWrapper) == 13);
+
+#define FIXED_TAG 0x06180618
+
+class MassStorageDevice : public USBDevice {
+ public:
+  explicit MassStorageDevice(ControllerDriver* driver) : USBDevice(driver) { }
+
+  void readCapacity() {
+    scsi::ReadCapacity10 cmd;
+    scsi::ReadCapacity10Response resp;
+    handleInCommand((uint8_t*) &cmd, sizeof(cmd), (uint8_t*) &resp, sizeof(resp));
+    blockSize_ = resp.block_length_in_bytes();
+    totalNumBlocks_ = resp.returned_logical_block_address() + 1;
+    printf("block size %d, total number of blocks %d\n", blockSize_, totalNumBlocks_);
+  }
+
+  // assumes buf has enough capacity to store nblock's of data
+  void readBlocks(uint32_t lba_start, uint32_t nblock, uint8_t* buf) {
+    assert(lba_start >= 0);
+    assert(nblock > 0);
+    assert(lba_start + nblock - 1 < totalNumBlocks_);
+
+    scsi::Read10 cmd(lba_start, nblock);
+    handleInCommand((uint8_t*) &cmd, sizeof(cmd), buf, nblock * blockSize_);
+  }
+
+  // assumes buf has enough capacity to store nblock's of data
+  void writeBlocks(uint32_t lba_start, uint32_t nblock, const uint8_t* buf) {
+    assert(lba_start >= 0);
+    assert(nblock > 0);
+    assert(lba_start + nblock - 1 < totalNumBlocks_);
+    scsi::Write10 cmd(lba_start, nblock);
+    handleOutCommand((uint8_t*) &cmd, sizeof(cmd), buf, nblock * blockSize_);
+  }
+
+  /*
+   * Handle a SCSI command that read content from the device.
+   */
+  void handleInCommand(uint8_t* cmdptr, int cmdlen, uint8_t* payloadPtr, int payloadLen) {
+    CommandBlockWrapper cbw(
+      FIXED_TAG,
+      payloadLen,
+      true, // in request
+      cmdlen,
+      cmdptr);
+    bulkSend((uint8_t*) &cbw, sizeof(cbw));
+    bulkRecv(payloadPtr, payloadLen);
+
+    CommandStatusWrapper csw;
+    bulkRecv((uint8_t*) &csw, sizeof(csw));
+    assert(csw.signature == CSW_SIGNATURE);
+    assert(csw.tag == cbw.tag);
+    assert(csw.success());
+  }
+
+  /*
+   * Handle a SCSI command that send content to the device.
+   */
+  void handleOutCommand(uint8_t* cmdptr, int cmdlen, const uint8_t* payloadPtr, int payloadLen) {
+    CommandBlockWrapper cbw(
+      FIXED_TAG,
+      payloadLen,
+      false, // out request
+      cmdlen,
+      cmdptr);
+    bulkSend((uint8_t*) &cbw, sizeof(cbw));
+    bulkSend(payloadPtr, payloadLen);
+
+    CommandStatusWrapper csw;
+    bulkRecv((uint8_t*) &csw, sizeof(csw));
+    assert(csw.signature == CSW_SIGNATURE);
+    assert(csw.tag == cbw.tag);
+    assert(csw.success());
+  }
+
+  void bulkSend(const uint8_t *buf, int bufsize) {
+    controller_driver_->bulkSend(this, bulkOut_, bulkOutDataToggle_, buf, bufsize);
+  }
+
+  void bulkRecv(uint8_t *buf, int bufsize) {
+    controller_driver_->bulkRecv(this, bulkIn_, bulkInDataToggle_, buf, bufsize);
+  }
+ public:
+  uint32_t blockSize() const {
+    return blockSize_;
+  }
+ private:
+  uint32_t blockSize_;
+  uint32_t totalNumBlocks_;
+};
