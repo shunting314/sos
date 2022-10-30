@@ -4,6 +4,7 @@
 #include <kernel/sleep.h>
 #include <kernel/phys_page.h>
 #include <kernel/usb/usb_proto.h>
+#include <kernel/usb/hci.h>
 #include <string.h>
 
 enum class UHCIRegOff {
@@ -18,9 +19,9 @@ enum class UHCIRegOff {
 
 class USBDevice;
 
-class UHCIDriver {
+class UHCIDriver : public USBControllerDriver {
  public:
-  explicit UHCIDriver(const PCIFunction& pci_func = PCIFunction()) : pci_func_(pci_func) {
+  explicit UHCIDriver(const PCIFunction& pci_func = PCIFunction()) : USBControllerDriver(pci_func) {
     if (pci_func_) {
       printf("UHCI interrupt line %d, interrupt pin %d\n", pci_func_.interrupt_line(), pci_func_.interrupt_pin());
       setupBar();
@@ -146,7 +147,6 @@ class UHCIDriver {
     sc2_port_ = Port16Bit(iobar_.get_addr() + (int) UHCIRegOff::PORTSC2);
   }
 
-  PCIFunction pci_func_;
   Bar iobar_;
 
   Port16Bit cmd_port_;

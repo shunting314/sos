@@ -105,7 +105,7 @@ QEMU=$(QEMU_PREFIX)qemu-system-x86_64
 
 UHCI_OPTIONS := -device piix4-usb-uhci,id=id_uhci -drive if=none,id=usbstick,format=raw,file=kernel/kernel_main.cpp -device usb-storage,bus=id_uhci.0,drive=usbstick
 
-# XHCI_OPTIONS := -device qemu-xhci
+XHCI_OPTIONS := -device qemu-xhci,id=id_xhci -drive if=none,id=usbstick_2,format=raw,file=kernel/kernel_main.cpp -device usb-storage,bus=id_xhci.0,drive=usbstick_2
 
 USB_OPTIONS := $(UHCI_OPTIONS) $(XHCI_OPTIONS)
 

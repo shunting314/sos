@@ -1,5 +1,6 @@
 #include <kernel/usb/usb.h>
 #include <kernel/usb/uhci.h>
+#include <kernel/usb/xhci.h>
 #include <kernel/usb/usb_proto.h>
 #include <kernel/usb/usb_device.h>
 #include <kernel/usb/msd.h>
@@ -7,6 +8,7 @@
 // for usb initialization
 PCIFunction uhci_func, ohci_func, ehci_func, xhci_func;
 UHCIDriver uhci_driver;
+XHCIDriver xhci_driver;
 
 void setup_uhci() {
   assert(uhci_func);
@@ -65,6 +67,15 @@ void setup_uhci() {
   #endif
 }
 
+void setup_xhci() {
+  assert(xhci_func);
+  xhci_driver = XHCIDriver(xhci_func);
+  xhci_driver.reset();
+}
+
 void usb_init() {
+  #if 0
   setup_uhci();
+  #endif
+  setup_xhci();
 }
