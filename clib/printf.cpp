@@ -3,6 +3,9 @@
 
 typedef void putchar_fn_t(char ch);
 
+// 64 bit print does not work yet. They depends on symbols like:
+// `__udivdi3' and `__umoddi3'
+// void printnum_unsigned(uint64_t num, int base, putchar_fn_t* putchar_fn) {
 void printnum_unsigned(uint32_t num, int base, putchar_fn_t* putchar_fn) {
   static char digits[] = "0123456789abcdef";
   // handle single digit
@@ -72,6 +75,20 @@ int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn) {
         percent_mode = 0;
         goto next;
       }
+      #if 0
+      // 64 bit print does not work yet. They depends on symbols like:
+      // `__udivdi3' and `__umoddi3'
+      case 'l': {
+        if (*(cp + 1) == 'l' && *(cp + 2) == 'x') {
+          cp += 2; // not adding 3 since there will be a ++cp in the end of this iteration
+          uint64_t num = va_arg(va, uint64_t);
+          printnum_unsigned(num, 16, putchar_fn);
+          percent_mode = 0;
+          goto next;
+        }
+        break;
+      }
+      #endif
       default:
         break;
       }

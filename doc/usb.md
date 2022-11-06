@@ -20,3 +20,4 @@ USB defines CommandBlockWrapper to wrap a command for MSD device. The command se
 ## XHCI
 - [xHCI - wikipedia](https://en.wikipedia.org/wiki/Extensible_Host_Controller_Interface)
 - [xHCI - osdev](https://wiki.osdev.org/EXtensible_Host_Controller_Interface): this page mentions [xHCI implementation in HaiKu OS](https://github.com/haiku/haiku/blob/master/src/add-ons/kernel/busses/usb/xhci.cpp). Maybe worth check that when needed.
+- [Intel xHCI Spec](https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/extensible-host-controler-interface-usb-xhci.pdf): It's referenced from 'xHCI - wikipedia'.
