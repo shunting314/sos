@@ -1,6 +1,7 @@
 #pragma once
 
 #include <kernel/usb/hci.h>
+#include <kernel/usb/xhci_ctx.h>
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
 #include <assert.h>
@@ -78,8 +79,10 @@ static_assert(sizeof(LinkTRB) == 16);
 enum class XHCICapRegOff {
   CAPLENGTH = 0, // 1 byte
   HCSPARAMS1 = 0x04, // 4 byte
+  HCSPARAMS2 = 0x08, // 4 byte
   HCCPARAMS1 = 0x10, // capability parameters 1, 4 byte
   DBOFF = 0x14, // 4 byte
+  RTSOFF = 0x18, // runtime reigster space offset, 4 bytes.
 };
 
 // All operational registers are multiple of 32 bits in length.
@@ -88,12 +91,30 @@ enum class XHCIOpRegOff {
   USBSTS = 4, // USB Status
   CRCR_LOW = 0x18, // Command Ring Control Register, lower 4 bytes
   CRCR_HIGH = 0x1C, // Command Ring Control Register, high 4 bytes
+  DCBAAP_LOW = 0x30, // Device context base address array pointer
+  DCBAAP_HIGH = 0x34, // Device context base address array pointer
 
   // each port has a group of 4 registers (16 bytes)
   PORTSC = 0x400,
   PORTPMSC = 0x404,
   PORTLI = 0x408,
   PORTHLPMC = 0x40C,
+};
+
+enum class XHCIRuntimeRegOff {
+  IMAN = 0x20, // interrupter management register, 4 bytes
+  IMOD = 0x24, // interrupter moderation register, 4 bytes
+  // event ring segment table size register, 4 bytes
+  // define the nubmer of event ring segments
+  ERSTSZ = 0x28,
+  // event ring segment table base address register
+  ERSTBA_LOW = 0x30, 
+  ERSTBA_HIGH = 0x34,
+  // event ring dequeue pointer register.
+  // Software updates the pointer when it finishes the evaluation
+  // of an event on the event ring.
+  ERDP_LOW = 0x38,
+  ERDP_HIGH = 0x3c,
 };
 
 struct CRCRegister {
@@ -126,6 +147,23 @@ struct CRCRegister {
 
 static_assert(sizeof(CRCRegister) == 8);
 
+class TRBRing;
+
+class EventRingSegmentTableEntry {
+ public:
+  explicit EventRingSegmentTableEntry(const TRBRing& trb_ring);
+  explicit EventRingSegmentTableEntry() { }
+  // low 6 bits should be 0. i.e., segment table should be 64 byte align.
+  uint32_t ring_segment_base_address_low;
+  uint32_t ring_segment_base_address_high;
+  // high 16 bits all 0.
+  // Count in number of TRBs. Value values should be in [16, 4096]
+  uint32_t ring_segment_size;
+  uint32_t rsvd;
+};
+
+static_assert(sizeof(EventRingSegmentTableEntry) == 16);
+
 class XHCIDriver : public USBControllerDriver {
  public:
   explicit XHCIDriver(const PCIFunction& pci_func = PCIFunction()) : USBControllerDriver(pci_func) {
@@ -138,7 +176,9 @@ class XHCIDriver : public USBControllerDriver {
   void reset() {
     printf("CAPLENGTH %d\n", getCapLength());
     printf("DBOFF %d\n", getDBOff());
+    printf("RTSOFF %d\n", getRTSOff());
     opRegBase_ = (void *) membar_.get_addr() + getCapLength();
+    runtimeRegBase_ = (void *) membar_.get_addr() + getRTSOff();
 
     // the controller is in a running state if a usb drive is attached at the
     // beginning. Stop it first.
@@ -151,6 +191,7 @@ class XHCIDriver : public USBControllerDriver {
     }
 
     printf("HCSPARAMS1 0x%x\n", getHCSParams1());
+    printf("HCSPARAMS2 0x%x\n", getHCSParams2());
     printf("HCCPARAMS1 0x%x\n", getHCCParams1());
     // assume CSZ == 0 indicting 32 byte context structure size
     assert((getHCCParams1() & (1 << 2)) == 0);
@@ -158,6 +199,8 @@ class XHCIDriver : public USBControllerDriver {
     printf("USBSTS 0x%x\n", getUSBSts());
     printf("CRCR_LOW 0x%x\n", getCRCRLow());
     printf("CRCR_HIGH 0x%x\n", getCRCRHigh());
+    printf("DCBAAP_LOW 0x%x\n", getDCBAAPLow());
+    printf("DCBAAP_HIGH 0x%x\n", getDCBAAPHigh());
 
     assert(getUSBSts() & 0x1); // halted
 
@@ -180,6 +223,9 @@ class XHCIDriver : public USBControllerDriver {
     initialize();
   }
 
+  void initializeContext();
+  void initializeCommandRing();
+  void initializeInterrupter();
   void initialize();
 
   // API for capability registers
@@ -206,12 +252,20 @@ class XHCIDriver : public USBControllerDriver {
     return *(uint32_t*) getCapRegPtr(XHCICapRegOff::HCSPARAMS1);
   }
 
+  uint32_t getHCSParams2() {
+    return *(uint32_t*) getCapRegPtr(XHCICapRegOff::HCSPARAMS2);
+  }
+
   uint32_t getHCCParams1() {
     return *(uint32_t*) getCapRegPtr(XHCICapRegOff::HCCPARAMS1);
   }
 
   uint32_t getDBOff() {
     return *(uint32_t*) getCapRegPtr(XHCICapRegOff::DBOFF);
+  }
+
+  uint32_t getRTSOff() {
+    return *(uint32_t*) getCapRegPtr(XHCICapRegOff::RTSOFF);
   }
 
   // API for operational registers
@@ -248,9 +302,62 @@ class XHCIDriver : public USBControllerDriver {
     *getOpRegPtr(XHCIOpRegOff::CRCR_HIGH) = high;
   }
 
+  uint32_t getDCBAAPLow() {
+    return *getOpRegPtr(XHCIOpRegOff::DCBAAP_LOW);
+  }
+
+  void setDCBAAPLow(uint32_t low) {
+    assert((low & 63) == 0); // 64 byte aligh. Check xhci spec 5.4.6
+    *getOpRegPtr(XHCIOpRegOff::DCBAAP_LOW) = low;
+  }
+
+  uint32_t getDCBAAPHigh() {
+    return *getOpRegPtr(XHCIOpRegOff::DCBAAP_HIGH);
+  }
+
+  void setDCBAAPHigh(uint32_t high) {
+    *getOpRegPtr(XHCIOpRegOff::DCBAAP_HIGH) = high;
+  }
+
   // port_no starts from 1
   uint32_t getPortSC(uint32_t port_no) {
     return *(getOpRegPtr(XHCIOpRegOff::PORTSC) + 4 * (port_no - 1));
+  }
+
+  // API for runtime registers
+  #define INTERRUPTER_REGISTER_REGION_SIZE 32
+  uint32_t getIMan(uint32_t interrupter_id) {
+    return *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::IMAN) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE);
+  }
+
+  uint32_t getIMod(uint32_t interrupter_id) {
+    return *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::IMOD) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE);
+  }
+
+  uint32_t getERSTSZ(uint32_t interrupter_id) {
+    return *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERSTSZ) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE);
+  }
+
+  void setERSTSZ(uint32_t interrupter_id, int sz) {
+    *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERSTSZ) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE) = sz;
+  }
+
+  void setERSTBALow(uint32_t interrupter_id, uint32_t low) {
+    assert((low & 63) == 0);
+    *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERSTBA_LOW) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE) = low;
+  }
+
+  void setERSTBAHigh(uint32_t interrupter_id, uint32_t high) {
+    *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERSTBA_HIGH) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE) = high;
+  }
+
+  void setERDPLow(uint32_t interrupter_id, uint32_t low) {
+    assert((low & 0xF) == 0);
+    *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERDP_LOW) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE) = low;
+  }
+
+  void setERDPHigh(uint32_t interrupter_id, uint32_t high) {
+    *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERDP_HIGH) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE) = high;
   }
  private:
   void* getCapRegPtr(XHCICapRegOff off) {
@@ -261,7 +368,12 @@ class XHCIDriver : public USBControllerDriver {
     return (uint32_t *) (opRegBase_ + (int) off);
   }
 
+  uint32_t* getRuntimeRegPtr(XHCIRuntimeRegOff off) {
+    return (uint32_t *) (runtimeRegBase_ + (int) off);
+  }
+
  private:
   Bar membar_;
   void *opRegBase_;
+  void *runtimeRegBase_;
 };
