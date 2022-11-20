@@ -2,6 +2,7 @@
 
 #include <kernel/usb/hci.h>
 #include <kernel/usb/xhci_ctx.h>
+#include <kernel/usb/xhci_trb.h>
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
 #include <assert.h>
@@ -11,75 +12,12 @@
  * Multi-byte field follows litte endian.
  */
 
-enum TRBType {
-  LINK = 6,
-};
-
-class TRBTemplate;
-
-class TRBCommon {
- public:
-  // clear the TRB to 0 so subclass don't need to worry about it.
-  // Assume a TRB has 16 bytes
-  explicit TRBCommon() {
-    memset(this, 0, 16);
-  }
-  TRBTemplate toTemplate() const;
-};
-
-// template for a transfer request block
-class TRBTemplate : public TRBCommon {
- public:
-  uint64_t parameter;
-  uint32_t status;
-  uint32_t c: 1; // cycle bit
-  uint32_t ent: 1; // evaluate next TRB
-  uint32_t others: 8;
-  uint32_t trb_type: 6;
-  uint32_t control: 16;
-};
-
-static_assert(sizeof(TRBTemplate) == 16);
-
-// an empty class has size 1 rather than 0 so different objects have different
-// addresses.
-static_assert(sizeof(TRBCommon) == 1);
-
-class LinkTRB : public TRBCommon {
- public:
-  explicit LinkTRB(uint32_t segment_addr) {
-    ring_segment_pointer_low = (segment_addr >> 4);
-    tc = 1; // set toggle bit
-    trb_type = TRBType::LINK;
-  }
-
- public:
-  uint32_t rsvd0 : 4;
-  uint32_t ring_segment_pointer_low : 28;
-  uint32_t ring_segment_pointer_high;
-  uint32_t rsvd1 : 22;
-  uint32_t interrupter_target : 10;
-  // cycle bit
-  uint32_t c : 1;
-  // toggle cycle
-  uint32_t tc : 1;
-  uint32_t rsvd2 : 2;
-  // chain bit
-  uint32_t ch : 1;
-  uint32_t ioc : 1;
-  uint32_t rsvd3 : 4;
-  uint32_t trb_type : 6;
-  uint32_t rsvd4 : 16;
-};
-
-static_assert(sizeof(LinkTRB) == 16);
-
 // Capability register offset
 // Refer to the osdev xHCI wiki or xHCI spec.
 enum class XHCICapRegOff {
   CAPLENGTH = 0, // 1 byte
-  HCSPARAMS1 = 0x04, // 4 byte
-  HCSPARAMS2 = 0x08, // 4 byte
+  HCSPARAMS1 = 0x04, // structural params 1, 4 byte
+  HCSPARAMS2 = 0x08, // structural params 2, 4 byte
   HCCPARAMS1 = 0x10, // capability parameters 1, 4 byte
   DBOFF = 0x14, // 4 byte
   RTSOFF = 0x18, // runtime reigster space offset, 4 bytes.
@@ -93,6 +31,7 @@ enum class XHCIOpRegOff {
   CRCR_HIGH = 0x1C, // Command Ring Control Register, high 4 bytes
   DCBAAP_LOW = 0x30, // Device context base address array pointer
   DCBAAP_HIGH = 0x34, // Device context base address array pointer
+  CONFIG = 0x38, // configure register, 32 bits
 
   // each port has a group of 4 registers (16 bytes)
   PORTSC = 0x400,
@@ -201,6 +140,7 @@ class XHCIDriver : public USBControllerDriver {
     printf("CRCR_HIGH 0x%x\n", getCRCRHigh());
     printf("DCBAAP_LOW 0x%x\n", getDCBAAPLow());
     printf("DCBAAP_HIGH 0x%x\n", getDCBAAPHigh());
+    printf("CONFIG 0x%x\n", getConfig());
 
     assert(getUSBSts() & 0x1); // halted
 
@@ -218,15 +158,27 @@ class XHCIDriver : public USBControllerDriver {
       printf("port %d sc 0x%x\n", port_no, getPortSC(port_no));
     }
 
-    // TODO reset the port. Check xHCI spec 4.19.5
-
     initialize();
+    setUSBCmdFlags(1 << 0); // set the run/stop bit
+    while (getUSBSts() & 0x1) {
+      msleep(1);
+    }
+    assert((getUSBSts() & 0x1) == 0); // not halted
+
+    // resetting the root hub port will reset the attached device
+    resetPort(1);
+    // TODO: should we put this in a device class?
+    initializeDevice();
   }
+ 
+  void initializeDevice();
+  void resetPort(int port_no);
 
   void initializeContext();
   void initializeCommandRing();
   void initializeInterrupter();
   void initialize();
+  uint32_t allocate_device_slot();
 
   // API for capability registers
 
@@ -260,8 +212,28 @@ class XHCIDriver : public USBControllerDriver {
     return *(uint32_t*) getCapRegPtr(XHCICapRegOff::HCCPARAMS1);
   }
 
+  // get extended capabilities pointer. 0 means no extended capabilities
+  // If non zero, this pointer specifies the offset to membar base in dword
+  // unit.
+  uint32_t getECP() {
+    return getHCCParams1() >> 16;
+  }
+
   uint32_t getDBOff() {
     return *(uint32_t*) getCapRegPtr(XHCICapRegOff::DBOFF);
+  }
+
+  /*
+   * xhci spec 5.3.7 mentions DBOFF defines the offset in *Dwords* of the doorbell
+   * array base addres from the Base.
+   *
+   * However in practice, there is no need to multiply DBOFF by 4 to calculate the
+   * address of the doorbell array.
+   */
+  void ringDoorbell(uint32_t index, uint32_t val) {
+    assert(index <= 255);
+    volatile uint32_t* addr = (volatile uint32_t*) (membar_.get_addr() + getDBOff());
+    *addr = val;
   }
 
   uint32_t getRTSOff() {
@@ -319,9 +291,21 @@ class XHCIDriver : public USBControllerDriver {
     *getOpRegPtr(XHCIOpRegOff::DCBAAP_HIGH) = high;
   }
 
+  uint32_t getConfig() {
+    return *getOpRegPtr(XHCIOpRegOff::CONFIG);
+  }
+
   // port_no starts from 1
   uint32_t getPortSC(uint32_t port_no) {
     return *(getOpRegPtr(XHCIOpRegOff::PORTSC) + 4 * (port_no - 1));
+  }
+
+  void setPortSC(uint32_t port_no, uint32_t sc) {
+    *(getOpRegPtr(XHCIOpRegOff::PORTSC) + 4 * (port_no - 1)) = sc;
+  }
+
+  void setPortSCFlags(uint32_t port_no, uint32_t flags) {
+    setPortSC(port_no, getPortSC(port_no) | flags);
   }
 
   // API for runtime registers

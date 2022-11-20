@@ -1,33 +1,14 @@
 #include <kernel/usb/xhci.h>
+#include <kernel/usb/xhci_ring.h>
 
 TRBTemplate TRBCommon::toTemplate() const {
   return *(TRBTemplate*) this;
 }
 
-// All TRBBase on the list contains all 0 initially. This is archieved by the
-// TRBCommon ctor.
-class TRBRing {
- public:
-  explicit TRBRing() {
-    assert((get_addr() & 0xFFF) == 0); // page alignment
-    assert(sizeof(trb_ring_) == 4096);
+ProducerTRBRing command_ring(true);
 
-    trb_ring_[capacity() - 1] = LinkTRB(get_addr()).toTemplate();
-  }
-
-  uint32_t capacity() const {
-    return sizeof(trb_ring_) / sizeof(*trb_ring_);
-  }
-
-  uint32_t get_addr() const {
-    return (uint32_t) &trb_ring_;
-  }
- private:
-  // 256 items
-  TRBTemplate trb_ring_[4096 / sizeof(TRBTemplate)] __attribute__((aligned(4096))); 
-};
-
-TRBRing command_ring;
+// TODO: support multiple event ring
+ConsumerTRBRing event_ring;
 
 // initialize the command ring. Setup CRCR to point to it.
 void XHCIDriver::initializeCommandRing() {
@@ -66,9 +47,6 @@ void XHCIDriver::initializeContext() {
   setDCBAAPHigh(0);
 }
 
-// TODO: support multiple event ring
-TRBRing event_ring;
-
 // a single event ring segment.
 EventRingSegmentTableEntry event_ring_segment_table[1] __attribute__((aligned(64)));
 
@@ -77,7 +55,7 @@ EventRingSegmentTableEntry::EventRingSegmentTableEntry(const TRBRing& trb_ring) 
   ring_segment_base_address_low = trb_ring.get_addr();
   assert((ring_segment_base_address_low & 63) == 0);
   ring_segment_base_address_high = 0;
-  ring_segment_size = trb_ring.capacity();
+  ring_segment_size = trb_ring.trb_capacity();
 }
 
 /*
@@ -92,18 +70,55 @@ void XHCIDriver::initializeInterrupter() {
   printf("ERSTSZ 0: %d\n", getERSTSZ(0));
 
   setERSTSZ(0, 1);  // a single event ring segment
+
+  // a tricky part here is, event_ring_segment_table must be setup before its
+  // address is provided to the controller. The controller may read the table
+  // when the address is given. Setting up the table after that is too late.
+  event_ring_segment_table[0] = EventRingSegmentTableEntry(event_ring);
   setERSTBALow(0, (uint32_t) &event_ring_segment_table);
   setERSTBAHigh(0, 0);
 
   setERDPLow(0, event_ring.get_addr());
   setERDPHigh(0, 0);
-
-  event_ring_segment_table[0] = EventRingSegmentTableEntry(event_ring);
 }
 
 void XHCIDriver::initialize() {
   initializeCommandRing();
   initializeContext();
   initializeInterrupter();
-  assert(false && "initialize ni");
+}
+
+void XHCIDriver::resetPort(int port_no) {
+  setPortSCFlags(port_no, 1 << 4); // port reset
+  // the bit will be cleared by xHC
+  while (getPortSC(port_no) & (1 << 4)) {
+    msleep(1);
+  }
+  // port reset change bit should be 1 after reset is done
+  assert(getPortSC(port_no) & (1 << 21));
+  setPortSC(port_no, 1 << 21); // write clear the PRC bit
+  assert((getPortSC(port_no) & (1 << 21)) == 0);
+}
+
+uint32_t XHCIDriver::allocate_device_slot() {
+  event_ring.skip_queued_trbs();
+  TRBTemplate* req = command_ring.enqueue(EnableSlotCommandTRB().toTemplate());
+  ringDoorbell(0, 0);
+  TRBTemplate resp = event_ring.dequeue();
+
+  CommandCompletionEventTRB command_comp = resp.expect_trb_type<CommandCompletionEventTRB>();
+  command_comp.assert_trb_addr(req);
+  assert(command_comp.success());
+  int slot_id = command_comp.slot_id;
+  // According to xhci spec 4.6.3, slot id 0 represents no slots available.
+  assert(slot_id > 0);
+  printf("Got slot %d\n", slot_id);
+
+  // TODO: update event ring dequeue pointer
+  return slot_id;
+}
+
+void XHCIDriver::initializeDevice() {
+  printf("Got device slot %d\n", allocate_device_slot());
+  assert(false && "init device");
 }

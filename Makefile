@@ -119,7 +119,7 @@ run: out/kernel.img fs.img
 	#
 	# '-serial stdio' is added so the final content on the screen in the guest OS is available in the host terminal after terminating qemu.
 	#   One flaw: after adding this option, the first keyboard input is somehow lost.
-	$(QEMU) -curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
+	$(QEMU) -display curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
 
 # start a connection to qemu monitor
 mon:
