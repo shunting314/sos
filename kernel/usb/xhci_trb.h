@@ -4,6 +4,7 @@ enum TRBType {
   LINK = 6,
   NO_OP = 8,
   ENABLE_SLOT_COMMAND = 9,
+  ADDRESS_DEVICE_COMMAND = 11,
   COMMAND_COMPLETION_EVENT = 33,
   PORT_STATUS_CHANGE_EVENT = 34,
 };
@@ -16,6 +17,8 @@ static const char* trb_type_str(TRBType trb_type) {
     return "no_op";
   case ENABLE_SLOT_COMMAND:
     return "enable_slot_command";
+  case ADDRESS_DEVICE_COMMAND:
+    return "address_device_command";
   case COMMAND_COMPLETION_EVENT:
     return "command_completion_event";
   case PORT_STATUS_CHANGE_EVENT:
@@ -126,6 +129,26 @@ class EnableSlotCommandTRB : public TRBCommon {
 
 static_assert(sizeof(EnableSlotCommandTRB) == 16);
 
+class AddressDeviceCommandTRB : public TRBCommon {
+ public:
+  explicit AddressDeviceCommandTRB(uint64_t _input_context_pointer, uint32_t _slot_id)
+    : input_context_pointer(_input_context_pointer), slot_id(_slot_id) {
+    assert((input_context_pointer & 0xF) == 0 && "Requirs 16 bytes alignment");
+    trb_type = ADDRESS_DEVICE_COMMAND;
+  }
+ public:
+  uint64_t input_context_pointer;
+  uint32_t rsvd;
+  uint32_t c : 1;
+  uint32_t rsvd2 : 8;
+  uint32_t bsr : 1; // block set address request
+  uint32_t trb_type : 6;
+  uint32_t rsvd3 : 8;
+  uint32_t slot_id : 8;
+};
+
+static_assert(sizeof(AddressDeviceCommandTRB) == 16);
+
 class NoOpTRB : public TRBCommon {
  public:
   explicit NoOpTRB() {
@@ -157,6 +180,9 @@ class CommandCompletionEventTRB : public TRBCommon {
   }
 
   bool success() {
+    if (completion_code != (int) TRBCompletionCode::SUCCESS) {
+      printf("Command fail with code %d\n", completion_code);
+    }
     return completion_code == (int) TRBCompletionCode::SUCCESS; 
   }
  public:

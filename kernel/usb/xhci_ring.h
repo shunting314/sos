@@ -31,7 +31,7 @@ class TRBRing {
 
 class ProducerTRBRing : public TRBRing {
  public:
-  explicit ProducerTRBRing(bool producer_cycle_state)
+  explicit ProducerTRBRing(bool producer_cycle_state = true)
     : TRBRing(true),
       producer_cycle_state_(producer_cycle_state),
       enqueue_ptr_(trb_ring_) {

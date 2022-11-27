@@ -179,6 +179,7 @@ class XHCIDriver : public USBControllerDriver {
   void initializeInterrupter();
   void initialize();
   uint32_t allocate_device_slot();
+  uint32_t assign_usb_device_address(uint32_t slot_id);
 
   // API for capability registers
 

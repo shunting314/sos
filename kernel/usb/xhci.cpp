@@ -5,10 +5,18 @@ TRBTemplate TRBCommon::toTemplate() const {
   return *(TRBTemplate*) this;
 }
 
-ProducerTRBRing command_ring(true);
+ProducerTRBRing command_ring;
 
 // TODO: support multiple event ring
 ConsumerTRBRing event_ring;
+
+#define AVAIL_TRANSFER_RINGS 8
+ProducerTRBRing transfer_ring_pool[AVAIL_TRANSFER_RINGS];
+ProducerTRBRing& allocate_transfer_ring() {
+  static int next_avail = 0;
+  assert(next_avail < AVAIL_TRANSFER_RINGS);
+  return transfer_ring_pool[next_avail++];
+}
 
 // initialize the command ring. Setup CRCR to point to it.
 void XHCIDriver::initializeCommandRing() {
@@ -34,6 +42,9 @@ DeviceContext globalDeviceContextList[256];
 // Entry 0 is for scratchpad if enabled or 0 otherwise. Check xHCI spec 6.1 for
 // details.
 uint64_t globalDeviceContextBaseAddrArray[256] __attribute__((aligned(64)));
+
+// TODO: can we control the lifetime of ths datastructure and save some memory?
+InputContext globalInputContextList[256];
 
 void XHCIDriver::initializeContext() {
   constexpr int nCtx = sizeof(globalDeviceContextList) / sizeof(*globalDeviceContextList);
@@ -112,13 +123,57 @@ uint32_t XHCIDriver::allocate_device_slot() {
   int slot_id = command_comp.slot_id;
   // According to xhci spec 4.6.3, slot id 0 represents no slots available.
   assert(slot_id > 0);
-  printf("Got slot %d\n", slot_id);
 
   // TODO: update event ring dequeue pointer
   return slot_id;
 }
 
+uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
+  InputContext& input_context = globalInputContextList[slot_id];
+  DeviceContext& output_context = globalDeviceContextList[slot_id];
+  input_context.control_context().include_add_context_flags(0x3);
+
+  // xhci spec 4.3.3: device slot initialization
+  {
+    // initialize input slot context
+    SlotContext& input_slot_context = input_context.device_context().slot_context();
+    input_slot_context.root_hub_port_number = 1; // TODO avoid hardcoding
+    input_slot_context.route_string = 0;
+    input_slot_context.context_entries = 1;
+  }
+  ProducerTRBRing& transfer_ring = allocate_transfer_ring();
+  EndpointContext& ep0_context = input_context.device_context().endpoint_context(0);
+  ep0_context.ep_type = EndpointType::CONTROL;
+  ep0_context.max_packet_size = 8; // TODO how to decide the value of this field?
+  ep0_context.max_burst_size = 0;
+  ep0_context.set_tr_dequeue_pointer((uint32_t) &transfer_ring);
+  ep0_context.dcs = 1;
+  ep0_context.interval = 0;
+  ep0_context.max_pstreams = 0;
+  ep0_context.mult = 0;
+  ep0_context.cerr = 3;
+
+  // xhci spec 4.3.4: address assignment
+  TRBTemplate* req = command_ring.enqueue(AddressDeviceCommandTRB((uint32_t) &input_context, slot_id).toTemplate());
+  ringDoorbell(0, 0); 
+  TRBTemplate resp = event_ring.dequeue();
+  CommandCompletionEventTRB command_comp = resp.expect_trb_type<CommandCompletionEventTRB>();
+  command_comp.assert_trb_addr(req);
+  assert(command_comp.success());
+
+  uint32_t usb_device_address = output_context.slot_context().usb_device_address;
+  assert((output_context.endpoint_context(0).tr_dequeue_pointer_low_28 << 4) == (uint32_t) &transfer_ring);
+  return usb_device_address;
+}
+
 void XHCIDriver::initializeDevice() {
-  printf("Got device slot %d\n", allocate_device_slot());
+  uint32_t slot_id = allocate_device_slot();
+  printf("Got device slot %d\n", slot_id);
+
+  uint32_t usb_device_address = assign_usb_device_address(slot_id);
+  printf("Assigned usb device address %d\n", usb_device_address);
+
+  // xhci spec: 4.3.5 device configuration
+
   assert(false && "init device");
 }
