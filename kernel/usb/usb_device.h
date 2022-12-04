@@ -7,9 +7,8 @@
 #include <kernel/usb/usb_proto.h>
 #include <kernel/scsi.h>
 
-// TODO: use some controller driver base class rather than UHCIDriver
-#define ControllerDriver UHCIDriver
-
+// TODO: instead of using template, use a controller driver base class
+template <typename ControllerDriver>
 class USBDevice {
  public:
   explicit USBDevice(ControllerDriver* driver)
@@ -122,6 +121,10 @@ class USBDevice {
   }
 
   uint8_t getAddr() const { return addr_; }
+
+  uint32_t& slot_id() {
+    return slot_id_;
+  }
  private:
   // short hands to create DeviceRequest
   DeviceRequest createGetDeviceDescriptorRequest() {
@@ -207,4 +210,7 @@ class USBDevice {
   EndpointDescriptor bulkOut_;
   uint32_t bulkInDataToggle_ = 0;
   EndpointDescriptor bulkIn_;
+
+  // only needed for XHCI
+  uint32_t slot_id_ = -1;
 };

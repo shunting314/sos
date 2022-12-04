@@ -17,6 +17,7 @@ enum class UHCIRegOff {
   PORTSC2 = 18, // port 2 status/control, 2 bytes
 };
 
+template <typename ControllerDriver>
 class USBDevice;
 
 class UHCIDriver : public USBControllerDriver {
@@ -122,9 +123,9 @@ class UHCIDriver : public USBControllerDriver {
 
  public:
   // APIs talking to USB devices
-  void sendDeviceRequest(USBDevice* device, DeviceRequest* req, void *buf);
-  void bulkSend(USBDevice* device, const EndpointDescriptor& desc, uint32_t& toggle, const uint8_t* buf, int bufsize);
-  void bulkRecv(USBDevice* device, const EndpointDescriptor& desc, uint32_t& toggle, uint8_t* buf, int bufsize);
+  void sendDeviceRequest(USBDevice<UHCIDriver>* device, DeviceRequest* req, void *buf);
+  void bulkSend(USBDevice<UHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& toggle, const uint8_t* buf, int bufsize);
+  void bulkRecv(USBDevice<UHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& toggle, uint8_t* buf, int bufsize);
 
   // a simple implementation that only do allocation but no reclamation
   uint8_t acquireAvailAddr() const {

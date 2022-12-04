@@ -1,10 +1,18 @@
 #pragma once
 
+#include <kernel/usb/usb_proto.h>
+#include <stdlib.h>
+
 enum TRBType {
+  SETUP_STAGE = 2,
+  DATA_STAGE = 3,
+  STATUS_STAGE = 4,
   LINK = 6,
   NO_OP = 8,
   ENABLE_SLOT_COMMAND = 9,
   ADDRESS_DEVICE_COMMAND = 11,
+  CONFIGURE_ENDPOINT_COMMAND = 12,
+  TRANSFER_EVENT = 32,
   COMMAND_COMPLETION_EVENT = 33,
   PORT_STATUS_CHANGE_EVENT = 34,
 };
@@ -149,6 +157,21 @@ class AddressDeviceCommandTRB : public TRBCommon {
 
 static_assert(sizeof(AddressDeviceCommandTRB) == 16);
 
+class ConfigureEndpointCommandTRB : public TRBCommon {
+ public:
+ public:
+  uint64_t input_context_pointer;
+  uint32_t rsvd;
+  uint32_t c : 1;
+  uint32_t rsvd2 : 8;
+  uint32_t dc : 1; // deconfigure
+  uint32_t trb_type : 6;
+  uint32_t rsvd3 : 8;
+  uint32_t slot_id : 8;
+};
+
+static_assert(sizeof(ConfigureEndpointCommandTRB) == 16);
+
 class NoOpTRB : public TRBCommon {
  public:
   explicit NoOpTRB() {
@@ -164,9 +187,164 @@ class NoOpTRB : public TRBCommon {
 
 static_assert(sizeof(NoOpTRB) == 16);
 
+class SetupStageTRB : public TRBCommon {
+ public:
+  explicit SetupStageTRB(DeviceRequest *req) : trb_transfer_length(8), idt(1), trb_type(SETUP_STAGE) {
+    bmRequestType = req->bmRequestType;
+    bRequest = req->bRequest;
+    wValue = req->wValue;
+    wIndex = req->wIndex;
+    wLength = req->wLength;
+    trt = 3;
+  }
+
+ public:
+  // word 0
+  uint32_t bmRequestType : 8;
+  uint32_t bRequest : 8;
+  uint32_t wValue : 16;
+
+  // word 1
+  uint32_t wIndex : 16;
+  uint32_t wLength : 16;
+
+  // word 2
+  // always 8 according to xhci spec 6.4.1.2.1
+  uint32_t trb_transfer_length : 17;
+  uint32_t rsvd : 5;
+  uint32_t interrupt_target : 10;
+
+  // word 3
+  uint32_t c : 1;
+  uint32_t rsvd2 : 4;
+  uint32_t ioc : 1;
+  // immediate data. This bit shall be set to 1 in a Setup Stage TRB.
+  // It specifies that the Parameter component of this TRB contains Setup Data
+  uint32_t idt : 1;
+  uint32_t rsvd3 : 3;
+  uint32_t trb_type : 6;
+  // transfer type
+  // 0: No data stage
+  // 1: reserved
+  // 2: OUT data stage
+  // 3: IN data stage
+  uint32_t trt : 2;
+  uint32_t rsvd4 : 14;
+};
+
+static_assert(sizeof(SetupStageTRB) == 16);
+
+class DataStageTRB : public TRBCommon {
+ public:
+  explicit DataStageTRB(uint32_t addr, uint32_t len, bool has_more, int nremaining_trb, bool is_dir_in) : trb_type(DATA_STAGE) {
+    data_buffer_lo = addr;
+    data_buffer_hi = 0;
+
+    trb_transfer_length = len;
+    td_size = min(nremaining_trb, 31);
+    ch = has_more;
+    dir = is_dir_in;
+  }
+ public:
+  uint32_t data_buffer_lo;
+  uint32_t data_buffer_hi;
+
+  uint32_t trb_transfer_length : 17;
+  uint32_t td_size : 5;  // the number of data trbs yet to be sent. Cap to 31
+  uint32_t interrupter_target : 10;
+
+  uint32_t c : 1;
+  uint32_t ent : 1; // evaluate next trb
+  uint32_t isp : 1; // interrupt-on short packet
+  uint32_t ns : 1; // no snoop
+  uint32_t ch : 1; // chain bit
+  uint32_t ioc : 1; // interrupt on completion
+  // immediate data. Set to 1 means the data_buffer
+  // field contains inlined data (between 1 to 8 bytes)
+  // rather than a pointer.
+  uint32_t idt : 1;
+  uint32_t rsvd : 3;
+  uint32_t trb_type : 6;
+  // data transfer direction.
+  // 0 for out, 1 for in
+  uint32_t dir : 1;
+  uint32_t rsvd2 : 15;
+};
+
+static_assert(sizeof(DataStageTRB) == 16);
+
+class StatusStageTRB : public TRBCommon {
+ public:
+  explicit StatusStageTRB(bool is_dir_in) : trb_type(STATUS_STAGE) {
+    ioc = 1;
+    dir = is_dir_in;
+  }
+ public:
+  uint32_t rsvd[2];
+  uint32_t rsvd2 : 22;
+  uint32_t interrupter_target : 10;
+
+  uint32_t c : 1;
+  uint32_t ent : 1;
+  uint32_t rsvd3 : 2;
+  uint32_t ch : 1;
+  uint32_t ioc : 1;
+  uint32_t rsvd4 : 4;
+  uint32_t trb_type : 6;
+  uint32_t dir : 1;
+  uint32_t rsvd5 : 15;
+};
+
+static_assert(sizeof(StatusStageTRB) == 16);
+
+/*
+ * Used by TransferEventTRB and CommandCompletionEventTRB
+ */
 enum TRBCompletionCode {
   SUCCESS = 1,
 };
+
+class TransferEventTRB : public TRBCommon {
+ public:
+  static TRBType TRB_TYPE() {
+    return TRANSFER_EVENT;
+  }
+
+  // TODO: avoid dupliate the code with CommandCompletionEventTRB::assert_trb_addr
+  void assert_trb_addr(TRBTemplate* expect) {
+    assert(trb_pointer_high == 0);
+    assert(trb_pointer_low == (uint32_t) expect);
+  }
+
+  bool has_residue() const {
+    return trb_transfer_length > 0;
+  }
+
+  // TODO: avoid dupliate the code with CommandCompletionEventTRB
+  bool success() {
+    if (completion_code != (int) TRBCompletionCode::SUCCESS) {
+      printf("Command fail with code %d\n", completion_code);
+    }
+    return completion_code == (int) TRBCompletionCode::SUCCESS; 
+  }
+ public:
+  uint32_t trb_pointer_low;
+  uint32_t trb_pointer_high;
+
+  uint32_t trb_transfer_length : 24;
+  uint32_t completion_code : 8;
+
+  uint32_t c : 1;
+  uint32_t rsvd : 1;
+  uint32_t event_data : 1;
+  uint32_t rsvd2 : 7;
+  uint32_t trb_type : 6;
+  uint32_t endpoint_id : 5;
+  uint32_t rsvd3 : 3;
+  uint32_t slot_id : 8;
+};
+
+static_assert(sizeof(TransferEventTRB) == 16);
 
 class CommandCompletionEventTRB : public TRBCommon {
  public:
@@ -174,6 +352,7 @@ class CommandCompletionEventTRB : public TRBCommon {
     return COMMAND_COMPLETION_EVENT;
   }
 
+  // TODO: avoid dupliate the code with TransferEventTRB::assert_trb_addr
   void assert_trb_addr(TRBTemplate* expect) {
     assert(command_trb_pointer_high == 0);
     assert(command_trb_pointer_low == (uint32_t) expect);

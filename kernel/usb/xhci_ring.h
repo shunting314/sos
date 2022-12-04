@@ -1,6 +1,7 @@
 #pragma once
 
 #include <kernel/usb/xhci_trb.h>
+#include <kernel/sleep.h>
 
 // All TRB (except LinkTRB) on the list contains all 0 initially. This is archieved by the
 // TRBCommon ctor.
@@ -21,6 +22,7 @@ class TRBRing {
   }
 
   uint32_t get_addr() const {
+    assert((uint32_t) &trb_ring_ == (uint32_t) this);
     return (uint32_t) &trb_ring_;
   }
  protected:

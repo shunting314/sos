@@ -2,6 +2,7 @@
 #pragma once
 
 #include <assert.h>
+#include <kernel/usb/usb_device.h>
 
 #define CBW_SIGNATURE 0x43425355 // 'USBC' in little endian
 #define CSW_SIGNATURE 0x53425355 // 'USBS' in little endian
@@ -61,9 +62,11 @@ static_assert(sizeof(CommandStatusWrapper) == 13);
 
 #define FIXED_TAG 0x06180618
 
-class MassStorageDevice : public USBDevice {
+// TODO: instead of using template, use a controller driver base class
+template <typename ControllerDriver>
+class MassStorageDevice : public USBDevice<ControllerDriver> {
  public:
-  explicit MassStorageDevice(ControllerDriver* driver) : USBDevice(driver) { }
+  explicit MassStorageDevice(ControllerDriver* driver) : USBDevice<ControllerDriver>(driver) { }
 
   void readCapacity() {
     scsi::ReadCapacity10 cmd;
@@ -134,11 +137,11 @@ class MassStorageDevice : public USBDevice {
   }
 
   void bulkSend(const uint8_t *buf, int bufsize) {
-    controller_driver_->bulkSend(this, bulkOut_, bulkOutDataToggle_, buf, bufsize);
+    this->controller_driver_->bulkSend(this, this->bulkOut_, this->bulkOutDataToggle_, buf, bufsize);
   }
 
   void bulkRecv(uint8_t *buf, int bufsize) {
-    controller_driver_->bulkRecv(this, bulkIn_, bulkInDataToggle_, buf, bufsize);
+    this->controller_driver_->bulkRecv(this, this->bulkIn_, this->bulkInDataToggle_, buf, bufsize);
   }
  public:
   uint32_t blockSize() const {

@@ -1,8 +1,26 @@
 #pragma once
 
 #include <string.h>
+#include <kernel/usb/xhci_ring.h>
 
 class SlotContext {
+ public:
+  // refer to xhci spec 6.2.2 for slot state value assignment.
+  const char* get_state_str() const {
+    switch (slot_state) {
+    case 0:
+      return "DISABLED/ENABLED";
+    case 1:
+      return "DEFAULT";
+    case 2:
+      return "ADDRESSED";
+    case 3:
+      return "CONFIGURED";
+    default:
+      assert(false && "invalid slot state");
+    }
+    assert(false && "can not reach here");
+  }
  public:
   // word 0
   uint32_t route_string : 20;
@@ -48,6 +66,11 @@ class EndpointContext {
     rsvd3 = 0;
     tr_dequeue_pointer_low_28 = (addr >> 4);
     tr_dequeue_pointer_hi = 0;
+  }
+
+  ProducerTRBRing& get_transfer_ring() {
+    assert(tr_dequeue_pointer_hi == 0);
+    return *(ProducerTRBRing*) (tr_dequeue_pointer_low_28 << 4);
   }
 
   // workd0
@@ -157,5 +180,4 @@ __attribute__((packed))
 #endif
 ;
 
-// This check fails because of padding
 static_assert(sizeof(InputContext) == 1024 + 32);

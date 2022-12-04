@@ -71,11 +71,17 @@ void setup_xhci() {
   assert(xhci_func);
   xhci_driver = XHCIDriver(xhci_func);
   xhci_driver.reset();
+
+  // TODO: we should not assume a mass storage device but detect the device type.
+  MassStorageDevice dev(&xhci_driver);
+  xhci_driver.initializeDevice(&dev);
 }
 
 void usb_init() {
   #if 0
   setup_uhci();
   #endif
+  #if 1
   setup_xhci();
+  #endif
 }

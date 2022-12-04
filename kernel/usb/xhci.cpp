@@ -1,5 +1,7 @@
 #include <kernel/usb/xhci.h>
 #include <kernel/usb/xhci_ring.h>
+#include <kernel/usb/usb_device.h>
+#include <kernel/usb/msd.h>
 
 TRBTemplate TRBCommon::toTemplate() const {
   return *(TRBTemplate*) this;
@@ -146,7 +148,7 @@ uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
   ep0_context.ep_type = EndpointType::CONTROL;
   ep0_context.max_packet_size = 8; // TODO how to decide the value of this field?
   ep0_context.max_burst_size = 0;
-  ep0_context.set_tr_dequeue_pointer((uint32_t) &transfer_ring);
+  ep0_context.set_tr_dequeue_pointer(transfer_ring.get_addr());
   ep0_context.dcs = 1;
   ep0_context.interval = 0;
   ep0_context.max_pstreams = 0;
@@ -166,7 +168,7 @@ uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
   return usb_device_address;
 }
 
-void XHCIDriver::initializeDevice() {
+void XHCIDriver::initializeDevice(USBDevice<XHCIDriver> *dev) {
   uint32_t slot_id = allocate_device_slot();
   printf("Got device slot %d\n", slot_id);
 
@@ -174,6 +176,42 @@ void XHCIDriver::initializeDevice() {
   printf("Assigned usb device address %d\n", usb_device_address);
 
   // xhci spec: 4.3.5 device configuration
+  printf("Current slot state: %s\n", globalDeviceContextList[slot_id].slot_context().get_state_str());
+
+  dev->slot_id() = slot_id;
+  ConfigurationDescriptor config_desc = dev->getConfigurationDescriptor();
+  printf("Config val %d\n", config_desc.bConfigurationValue);
 
   assert(false && "init device");
+}
+
+void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest* device_req, void *buf) {
+  assert(device->slot_id() >= 0);
+  EndpointContext& ep0_context = globalDeviceContextList[device->slot_id()].endpoint_context(0);
+  ProducerTRBRing& transfer_ring = ep0_context.get_transfer_ring();
+  transfer_ring.enqueue(SetupStageTRB(device_req).toTemplate());
+
+  int maxPacketLength = device->getMaxPacketLength();
+  int ndata_trb = (device_req->wLength + maxPacketLength - 1) / maxPacketLength;
+
+  uint32_t off = 0, len;
+  for (int i = 0; i < ndata_trb; ++i) {
+    len = min(maxPacketLength, device_req->wLength - off);
+    assert(len > 0);
+    auto data_trb = DataStageTRB((uint32_t) buf + off, len, i != ndata_trb - 1, ndata_trb - i - 1, !!(device_req->bmRequestType & 0x80));
+    transfer_ring.enqueue(data_trb.toTemplate());
+    off += len;
+  }
+
+  auto status_trb = StatusStageTRB(!!(device_req->bmRequestType & 0x80));
+  auto* status_trb_addr = transfer_ring.enqueue(status_trb.toTemplate());
+  ringDoorbell(device->slot_id(), 1 /* for control endpoint 0 */);
+
+  TRBTemplate event_trb_template = event_ring.dequeue();
+  TransferEventTRB event_trb = event_trb_template.expect_trb_type<TransferEventTRB>();
+  event_trb.assert_trb_addr(status_trb_addr);
+  assert(!event_trb.has_residue());
+  assert(event_trb.success());
+  assert(event_trb.endpoint_id == 1);
+  assert(event_trb.slot_id == device->slot_id());
 }

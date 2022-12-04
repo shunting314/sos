@@ -3,6 +3,7 @@
 #include <kernel/usb/hci.h>
 #include <kernel/usb/xhci_ctx.h>
 #include <kernel/usb/xhci_trb.h>
+#include <kernel/usb/usb_proto.h>
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
 #include <assert.h>
@@ -103,6 +104,9 @@ class EventRingSegmentTableEntry {
 
 static_assert(sizeof(EventRingSegmentTableEntry) == 16);
 
+template <typename ControllerDriver>
+class USBDevice;
+
 class XHCIDriver : public USBControllerDriver {
  public:
   explicit XHCIDriver(const PCIFunction& pci_func = PCIFunction()) : USBControllerDriver(pci_func) {
@@ -110,6 +114,9 @@ class XHCIDriver : public USBControllerDriver {
       membar_ = setupMembar();
     }
   }
+
+  // APIs talking to USB devices
+  void sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest* req, void *buf);
 
   // refer to xHCI spec 4.2 for the initialization process.
   void reset() {
@@ -167,11 +174,9 @@ class XHCIDriver : public USBControllerDriver {
 
     // resetting the root hub port will reset the attached device
     resetPort(1);
-    // TODO: should we put this in a device class?
-    initializeDevice();
   }
  
-  void initializeDevice();
+  void initializeDevice(USBDevice<XHCIDriver>* dev);
   void resetPort(int port_no);
 
   void initializeContext();
@@ -234,7 +239,7 @@ class XHCIDriver : public USBControllerDriver {
   void ringDoorbell(uint32_t index, uint32_t val) {
     assert(index <= 255);
     volatile uint32_t* addr = (volatile uint32_t*) (membar_.get_addr() + getDBOff());
-    *addr = val;
+    addr[index] = val;
   }
 
   uint32_t getRTSOff() {

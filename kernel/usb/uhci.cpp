@@ -179,7 +179,7 @@ void UHCIDriver::setupFramePtrs() {
   }
 }
 
-void UHCIDriver::sendDeviceRequest(USBDevice* device, DeviceRequest* req, void *buf) {
+void UHCIDriver::sendDeviceRequest(USBDevice<UHCIDriver>* device, DeviceRequest* req, void *buf) {
   int maxPacketLength = device->getMaxPacketLength();
   int maxLength = req->wLength;
   assert((maxLength > 0 && buf) || (maxLength == 0 && !buf));
@@ -238,7 +238,7 @@ void UHCIDriver::sendDeviceRequest(USBDevice* device, DeviceRequest* req, void *
   assert(!globalQueue.getElementLinkPtr());
 }
 
-void UHCIDriver::bulkSend(USBDevice* device, const EndpointDescriptor& desc, uint32_t& toggle, const uint8_t* buf, int bufsize) {
+void UHCIDriver::bulkSend(USBDevice<UHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& toggle, const uint8_t* buf, int bufsize) {
   int maxPacketSize = desc.wMaxPacketSize;
   int ntd = (bufsize + maxPacketSize - 1) / maxPacketSize;
   TransferDescriptor* tds = reserveTDs(ntd);
@@ -271,7 +271,7 @@ void UHCIDriver::bulkSend(USBDevice* device, const EndpointDescriptor& desc, uin
   }
 }
 
-void UHCIDriver::bulkRecv(USBDevice* device, const EndpointDescriptor& desc, uint32_t& toggle, uint8_t* buf, int bufsize) {
+void UHCIDriver::bulkRecv(USBDevice<UHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& toggle, uint8_t* buf, int bufsize) {
   int maxPacketSize = desc.wMaxPacketSize;
   int ntd = (bufsize + maxPacketSize - 1) / maxPacketSize;
   TransferDescriptor* tds = reserveTDs(ntd);
