@@ -44,9 +44,13 @@ void handle_cow(uint32_t la, paging_entry_t* ppte) {
 void pfhandler(InterruptFrame* framePtr) {
   uint32_t fault_addr = asm_get_cr2();
   UserProcess* curProcess = UserProcess::current();
+  int pid = -1;
+  if (curProcess) {
+    pid = curProcess->get_pid();
+  }
   printf("PFHANDLER pid %d, error code 0x%x"
          ", eip 0x%x, cr2 0x%x\n",
-         curProcess->get_pid(), framePtr->error_code, framePtr->eip, fault_addr);
+         pid, framePtr->error_code, framePtr->eip, fault_addr);
 
   // cr3 should equals to the current process's page direcotry
   phys_addr_t pgdir = curProcess->getPgdir();

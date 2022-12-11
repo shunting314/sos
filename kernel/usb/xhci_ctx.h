@@ -68,7 +68,9 @@ class EndpointContext {
     tr_dequeue_pointer_hi = 0;
   }
 
-  ProducerTRBRing& get_transfer_ring() {
+  // NOTE: the controller will update this field for the output device context.
+  //       For input context, this field is not changed by the controller.
+  ProducerTRBRing& get_tr_dequeue_pointer() {
     assert(tr_dequeue_pointer_hi == 0);
     return *(ProducerTRBRing*) (tr_dequeue_pointer_low_28 << 4);
   }
@@ -114,14 +116,18 @@ class DeviceContext {
     return *(SlotContext*) &ctx_list_[0];
   }
 
-  EndpointContext& endpoint_context(int ep_num, bool dir_in = false) {
+  static int endpoint_context_index(int ep_num, bool dir_in = false) {
     int idx = 0;
     if (ep_num == 0) {
       idx = 1;
     } else {
       idx = ep_num * 2 + dir_in;
     }
-    return ctx_list_[idx];
+    return idx;
+  }
+
+  EndpointContext& endpoint_context(int ep_num, bool dir_in = false) {
+    return ctx_list_[endpoint_context_index(ep_num, dir_in)];
   }
  private:
   // the first one is actually a slot context. Organize this way so there is
@@ -135,6 +141,12 @@ class InputControlContext {
  public:
   void include_add_context_flags(uint32_t inc_flags) {
     add_context_flags_ |= inc_flags;
+  }
+  uint32_t& drop_context_flags() {
+    return drop_context_flags_;
+  }
+  uint32_t& add_context_flags() {
+    return add_context_flags_;
   }
  private:
   uint32_t drop_context_flags_;

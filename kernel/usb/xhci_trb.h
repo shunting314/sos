@@ -159,6 +159,12 @@ static_assert(sizeof(AddressDeviceCommandTRB) == 16);
 
 class ConfigureEndpointCommandTRB : public TRBCommon {
  public:
+  explicit ConfigureEndpointCommandTRB(uint64_t _input_context_pointer, uint32_t _slot_id)
+    : input_context_pointer(_input_context_pointer),
+      slot_id(_slot_id) {
+    assert((input_context_pointer & 0xF) == 0 && "Requirs 16 bytes alignment");
+    trb_type = CONFIGURE_ENDPOINT_COMMAND;
+  }
  public:
   uint64_t input_context_pointer;
   uint32_t rsvd;

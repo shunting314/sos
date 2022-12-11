@@ -97,6 +97,18 @@ class USBDevice {
         // TODO: don't support endpoint companion descriptors following endpoint descriptors so far.
         // usb3 spec section 9.6.5 mentions when this will happen.
         visitEndpointDesc(eddesc_ptr);
+
+        // an endpoint descriptor may be followed by a SuperSpeedEndpointCompanionDescriptor.
+        // TODO: should we not simply ignore SuperSpeedEndpointCompanionDescriptor?
+        if (off + 2 <= config_desc.wTotalLength) {
+          uint8_t nextlen = *(buf + off);
+          uint8_t nexttype = *(buf + off + 1);
+          if (nexttype == (int) DescriptorType::SUPERSPEED_USB_ENDPOINT_COMPANION) {
+            assert(nextlen == sizeof(SuperSpeedEndpointCompanionDescriptor));
+            assert(off + nextlen <= config_desc.wTotalLength);
+            off += nextlen;
+          }
+        }
       }
     }
 
@@ -125,6 +137,9 @@ class USBDevice {
   uint32_t& slot_id() {
     return slot_id_;
   }
+
+  EndpointDescriptor& get_bulk_out_endpoint_desc() { return bulkOut_; }
+  EndpointDescriptor& get_bulk_in_endpoint_desc() { return bulkIn_; }
  private:
   // short hands to create DeviceRequest
   DeviceRequest createGetDeviceDescriptorRequest() {

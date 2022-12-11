@@ -130,6 +130,39 @@ uint32_t XHCIDriver::allocate_device_slot() {
   return slot_id;
 }
 
+void XHCIDriver::initEndpoint0Context(InputContext& input_context) {
+  ProducerTRBRing& transfer_ring = allocate_transfer_ring();
+  EndpointContext& ep0_context = input_context.device_context().endpoint_context(0);
+  ep0_context.ep_type = EndpointType::CONTROL;
+  ep0_context.max_packet_size = 8; // TODO how to decide the value of this field?
+  ep0_context.max_burst_size = 0;
+  ep0_context.set_tr_dequeue_pointer(transfer_ring.get_addr());
+  ep0_context.dcs = 1;
+  ep0_context.interval = 0;
+  ep0_context.max_pstreams = 0;
+  ep0_context.mult = 0;
+  ep0_context.cerr = 3;
+}
+
+void XHCIDriver::initEndpointContext(InputContext& input_context, EndpointDescriptor& endpoint_descriptor) {
+  ProducerTRBRing& transfer_ring = allocate_transfer_ring();
+  bool is_in = (endpoint_descriptor.bEndpointAddress & 0x80);
+  EndpointContext& ep_context = input_context.device_context().endpoint_context(
+    endpoint_descriptor.bEndpointAddress & 0xF,
+    is_in
+  );
+  // TODO: only support bulk endpoint for now
+  ep_context.ep_type = is_in ? EndpointType::BULK_IN : EndpointType::BULK_OUT;
+  ep_context.max_packet_size = endpoint_descriptor.wMaxPacketSize;
+  ep_context.max_burst_size = 0;  // TODO use the information in SuperSpeedEndpointCompanionDescriptor to initialize it?
+  ep_context.set_tr_dequeue_pointer(transfer_ring.get_addr());
+  ep_context.dcs = 1;
+  ep_context.interval = 1;
+  ep_context.max_pstreams = 0;
+  ep_context.mult = 0;
+  ep_context.cerr = 3;
+}
+
 uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
   InputContext& input_context = globalInputContextList[slot_id];
   DeviceContext& output_context = globalDeviceContextList[slot_id];
@@ -143,29 +176,49 @@ uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
     input_slot_context.route_string = 0;
     input_slot_context.context_entries = 1;
   }
-  ProducerTRBRing& transfer_ring = allocate_transfer_ring();
-  EndpointContext& ep0_context = input_context.device_context().endpoint_context(0);
-  ep0_context.ep_type = EndpointType::CONTROL;
-  ep0_context.max_packet_size = 8; // TODO how to decide the value of this field?
-  ep0_context.max_burst_size = 0;
-  ep0_context.set_tr_dequeue_pointer(transfer_ring.get_addr());
-  ep0_context.dcs = 1;
-  ep0_context.interval = 0;
-  ep0_context.max_pstreams = 0;
-  ep0_context.mult = 0;
-  ep0_context.cerr = 3;
+  initEndpoint0Context(input_context);
 
   // xhci spec 4.3.4: address assignment
-  TRBTemplate* req = command_ring.enqueue(AddressDeviceCommandTRB((uint32_t) &input_context, slot_id).toTemplate());
+  sendCommand(AddressDeviceCommandTRB((uint32_t) &input_context, slot_id).toTemplate());
+
+  uint32_t usb_device_address = output_context.slot_context().usb_device_address;
+  assert(&output_context.endpoint_context(0).get_tr_dequeue_pointer() == &input_context.device_context().endpoint_context(0).get_tr_dequeue_pointer());
+  return usb_device_address;
+}
+
+void XHCIDriver::sendCommand(TRBTemplate req) {
+  TRBTemplate* req_addr = command_ring.enqueue(req);
   ringDoorbell(0, 0); 
   TRBTemplate resp = event_ring.dequeue();
   CommandCompletionEventTRB command_comp = resp.expect_trb_type<CommandCompletionEventTRB>();
-  command_comp.assert_trb_addr(req);
+  command_comp.assert_trb_addr(req_addr);
   assert(command_comp.success());
+}
 
-  uint32_t usb_device_address = output_context.slot_context().usb_device_address;
-  assert((output_context.endpoint_context(0).tr_dequeue_pointer_low_28 << 4) == (uint32_t) &transfer_ring);
-  return usb_device_address;
+static uint32_t add_context_flags_for_configure_endpoint(EndpointDescriptor& bulk_in, EndpointDescriptor bulk_out) {
+  uint32_t flags = 0;
+  flags |= 1; // pick the slot context
+  flags |= (1 << DeviceContext::endpoint_context_index(bulk_in.bEndpointAddress & 0xF, true));
+  assert(bulk_in.bEndpointAddress & 0x80);
+  flags |= (1 << DeviceContext::endpoint_context_index(bulk_out.bEndpointAddress & 0xF, false));
+  assert((bulk_out.bEndpointAddress & 0x80) == 0);
+  return flags;
+}
+
+// send configure endpoint command to the command ring.
+void XHCIDriver::configureEndpoints(USBDevice<XHCIDriver>* dev) {
+  uint32_t slot_id = dev->slot_id();
+  InputContext& input_context = globalInputContextList[slot_id];
+  initEndpointContext(input_context, dev->get_bulk_in_endpoint_desc());
+  initEndpointContext(input_context, dev->get_bulk_out_endpoint_desc());
+
+  InputControlContext& control_context = input_context.control_context();
+  control_context.drop_context_flags() = 0;
+  control_context.add_context_flags() = add_context_flags_for_configure_endpoint(dev->get_bulk_in_endpoint_desc(), dev->get_bulk_out_endpoint_desc());
+
+  // send the configure endpoint command
+  TRBTemplate req = ConfigureEndpointCommandTRB((uint32_t) &input_context, slot_id).toTemplate();
+  sendCommand(req);
 }
 
 void XHCIDriver::initializeDevice(USBDevice<XHCIDriver> *dev) {
@@ -176,19 +229,31 @@ void XHCIDriver::initializeDevice(USBDevice<XHCIDriver> *dev) {
   printf("Assigned usb device address %d\n", usb_device_address);
 
   // xhci spec: 4.3.5 device configuration
-  printf("Current slot state: %s\n", globalDeviceContextList[slot_id].slot_context().get_state_str());
-
   dev->slot_id() = slot_id;
   ConfigurationDescriptor config_desc = dev->getConfigurationDescriptor();
-  printf("Config val %d\n", config_desc.bConfigurationValue);
 
-  assert(false && "init device");
+  // set configuration
+  dev->setConfiguration(config_desc.bConfigurationValue);
+  assert(dev->getConfiguration() == config_desc.bConfigurationValue);
+  printf("The device is configured with config value %d\n", config_desc.bConfigurationValue);
+
+  dev->collectEndpointDescriptors();
+
+  // configure endpoints
+  configureEndpoints(dev);
+
+  printf("Current slot state: %s\n", globalDeviceContextList[slot_id].slot_context().get_state_str());
 }
 
 void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest* device_req, void *buf) {
   assert(device->slot_id() >= 0);
-  EndpointContext& ep0_context = globalDeviceContextList[device->slot_id()].endpoint_context(0);
-  ProducerTRBRing& transfer_ring = ep0_context.get_transfer_ring();
+
+  EndpointContext& input_ep0_context = globalInputContextList[device->slot_id()].device_context().endpoint_context(0);
+  // NOTE: the tr_dequeue_pointer read from the input context can represent the address of the transfer ring.
+  // (can not use the output device context here since the tr_dequeue_pointer for the output device context will
+  // be updated by the controller)
+  ProducerTRBRing& transfer_ring = input_ep0_context.get_tr_dequeue_pointer();
+
   transfer_ring.enqueue(SetupStageTRB(device_req).toTemplate());
 
   int maxPacketLength = device->getMaxPacketLength();

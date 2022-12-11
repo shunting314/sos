@@ -14,7 +14,21 @@ enum class DescriptorType : uint8_t {
   DEVICE_QUALIFIER = 6,
   OTHER_SPEED_CONFIGURATION = 7,
   INTERFACE_POWER = 8,
+  SUPERSPEED_USB_ENDPOINT_COMPANION = 48,
 };
+
+/*
+ * Per xhci spec 9.6.7 an endpoint companion descriptor (if exist) should immediately
+ * follow an endpoint descriptor it is associated with in the configuration
+ * information.
+ * TODO: We just ignore this descriptor for now.
+ */
+class SuperSpeedEndpointCompanionDescriptor {
+ public:
+  uint8_t dummy[6];
+};
+
+static_assert(sizeof(SuperSpeedEndpointCompanionDescriptor) == 6);
 
 class EndpointDescriptor {
  public:
@@ -25,14 +39,14 @@ class EndpointDescriptor {
     return bLength != 0;
   }
   void print() const {
-    ensure();
     printf("ENDPOINT DESC:\n"
       "  addr 0x%x, attr 0x%x, max packet size %d\n",
       bEndpointAddress, bmAttributes, wMaxPacketSize);
+    ensure();
   }
   void ensure() const {
-    assert(bLength == sizeof(EndpointDescriptor));
     assert(bDescriptorType == (uint8_t) DescriptorType::ENDPOINT);
+    assert(bLength == sizeof(EndpointDescriptor));
   }
 
   uint8_t bLength;

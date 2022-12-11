@@ -177,6 +177,7 @@ class XHCIDriver : public USBControllerDriver {
   }
  
   void initializeDevice(USBDevice<XHCIDriver>* dev);
+  void configureEndpoints(USBDevice<XHCIDriver>* dev);
   void resetPort(int port_no);
 
   void initializeContext();
@@ -363,6 +364,10 @@ class XHCIDriver : public USBControllerDriver {
   }
 
  private:
+  void initEndpoint0Context(InputContext& input_context);
+  void initEndpointContext(InputContext& input_context, EndpointDescriptor& endpoint_descriptor);
+  // send command to command ring and check the status in event ring
+  void sendCommand(TRBTemplate req);
   Bar membar_;
   void *opRegBase_;
   void *runtimeRegBase_;
