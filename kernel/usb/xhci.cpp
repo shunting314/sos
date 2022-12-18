@@ -280,3 +280,61 @@ void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest*
   assert(event_trb.endpoint_id == 1);
   assert(event_trb.slot_id == device->slot_id());
 }
+
+static int get_endpoint_context_idx(const EndpointDescriptor& desc) {
+  int ep_num = (desc.bEndpointAddress & 0xF);
+  bool is_in = (desc.bEndpointAddress & 0x80);
+  return DeviceContext::endpoint_context_index(ep_num, is_in);
+}
+
+static EndpointContext& get_endpoint_context(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, bool input_context) {
+  DeviceContext* device_context_ptr = nullptr;
+  if (input_context) {
+    device_context_ptr = &globalInputContextList[device->slot_id()].device_context();
+  } else {
+    device_context_ptr = &globalDeviceContextList[device->slot_id()];
+  }
+  DeviceContext& device_context = *device_context_ptr;
+  int ep_num = (desc.bEndpointAddress & 0xF);
+  bool is_in = (desc.bEndpointAddress & 0x80);
+  EndpointContext& endpoint_context = device_context.endpoint_context(ep_num, is_in);
+  return endpoint_context;
+}
+
+// common code for bulkSend/bulkRecv
+void XHCIDriver::bulkTransfer(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, const uint8_t* buf, int bufsize) {
+  EndpointContext& input_ctx = get_endpoint_context(device, desc, true);
+
+  int maxPacketSize = desc.wMaxPacketSize;
+  int ntd = (bufsize + maxPacketSize - 1) / maxPacketSize;
+  assert(bufsize > 0);
+
+  ProducerTRBRing &transfer_ring = input_ctx.get_tr_dequeue_pointer();
+
+  int off = 0, len;
+  TRBTemplate* expected_trb = nullptr;
+  for (int i = 0; i < ntd; ++i) {
+    len = min(maxPacketSize, bufsize - off);
+    NormalTRB normal_trb((uint32_t) buf + off, len, i == ntd - 1);
+    expected_trb = transfer_ring.enqueue(normal_trb.toTemplate()); // only the last assignment matters
+    off += len;
+  }
+
+  ringDoorbell(device->slot_id(), get_endpoint_context_idx(desc));
+
+  TRBTemplate event_trb_template = event_ring.dequeue();
+  TransferEventTRB event_trb = event_trb_template.expect_trb_type<TransferEventTRB>();
+  event_trb.assert_trb_addr(expected_trb);
+  assert(!event_trb.has_residue());
+  assert(event_trb.success());
+  assert(event_trb.endpoint_id == get_endpoint_context_idx(desc));
+  assert(event_trb.slot_id == device->slot_id());
+}
+
+void XHCIDriver::bulkSend(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& /* toggle */, const uint8_t* buf, int bufsize) {
+  bulkTransfer(device, desc, buf, bufsize);
+}
+
+void XHCIDriver::bulkRecv(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& /* toggle */, uint8_t* buf, int bufsize) {
+  bulkTransfer(device, desc, buf, bufsize);
+}

@@ -75,6 +75,28 @@ void setup_xhci() {
   // TODO: we should not assume a mass storage device but detect the device type.
   MassStorageDevice dev(&xhci_driver);
   xhci_driver.initializeDevice(&dev);
+
+  dev.readCapacity();
+  // read a block from MSD
+  uint8_t blockData[512];
+  assert(sizeof(blockData) >= dev.blockSize());
+  dev.readBlocks(0, 1, blockData);
+  printf("Data from USB:\n");
+  for (int i = 0; i < dev.blockSize(); ++i) {
+    putchar((char) blockData[i]);
+  }
+  printf("\n");
+
+  // write a block to MSD. Disable by default to avoid mutate the media
+  #if 0
+  uint8_t sendData[512];
+  assert(sizeof(sendData) >= dev.blockSize());
+  for (int i = 0; i < dev.blockSize(); ++i) {
+    sendData[i] = (i % 26 + 'a');
+  }
+  dev.writeBlocks(0, 1, sendData);
+  printf("Done writing a block to MSD\n");
+  #endif
 }
 
 void usb_init() {

@@ -117,6 +117,9 @@ class XHCIDriver : public USBControllerDriver {
 
   // APIs talking to USB devices
   void sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest* req, void *buf);
+  // toggle parameter is only needed for UHCI
+  void bulkSend(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& /* toggle */, const uint8_t* buf, int bufsize);
+  void bulkRecv(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, uint32_t& /* toggle */, uint8_t* buf, int bufsize);
 
   // refer to xHCI spec 4.2 for the initialization process.
   void reset() {
@@ -351,6 +354,8 @@ class XHCIDriver : public USBControllerDriver {
     *(uint32_t*) ((uint8_t*) getRuntimeRegPtr(XHCIRuntimeRegOff::ERDP_HIGH) + interrupter_id * INTERRUPTER_REGISTER_REGION_SIZE) = high;
   }
  private:
+  void bulkTransfer(USBDevice<XHCIDriver>* device, const EndpointDescriptor& desc, const uint8_t* buf, int bufsize);
+
   void* getCapRegPtr(XHCICapRegOff off) {
     return (void *) (membar_.get_addr() + (int) off);
   }

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 enum TRBType {
+  NORMAL = 1,
   SETUP_STAGE = 2,
   DATA_STAGE = 3,
   STATUS_STAGE = 4,
@@ -86,6 +87,41 @@ class TRBTemplate : public TRBCommon {
 };
 
 static_assert(sizeof(TRBTemplate) == 16);
+
+// use for bulk in/out transfer
+class NormalTRB : public TRBCommon {
+ public:
+  explicit NormalTRB(uint32_t _addr, uint32_t _len, bool _ioc) {
+    data_buffer_pointer = _addr;
+    trb_transfer_length = _len;
+    ioc = _ioc;
+    trb_type = NORMAL;
+  }
+
+ public:
+  uint64_t data_buffer_pointer;
+
+  // buffer size
+  uint32_t trb_transfer_length : 17;
+  // number of trbs remaining for this TD (excluding the current one).
+  // should be 0 for the last TRB of a TD
+  uint32_t td_size : 5;
+  uint32_t interrupter_target : 10;
+
+  uint32_t c : 1;
+  uint32_t ent : 1; // evaluate next TRB
+  uint32_t isp : 1; // interrupt on short packet
+  uint32_t ns : 1; // no snoop
+  uint32_t ch : 1; // chain bit
+  uint32_t ioc : 1; // interrupt on completion
+  uint32_t idt : 1; // immediate data
+  uint32_t rsvd : 2;
+  uint32_t bei : 1; // block event interrupt
+  uint32_t trb_type : 6;
+  uint32_t rsvd2 : 16;
+};
+
+static_assert(sizeof(NormalTRB) == 16);
 
 class LinkTRB : public TRBCommon {
  public:
