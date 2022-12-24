@@ -71,6 +71,14 @@ EventRingSegmentTableEntry::EventRingSegmentTableEntry(const TRBRing& trb_ring) 
   ring_segment_size = trb_ring.trb_capacity();
 }
 
+XHCIDriver* gcontroller = nullptr;
+
+void update_hc_event_ring_dequeue_ptr(TRBTemplate *dequeue_ptr) {
+  assert(gcontroller);
+  gcontroller->setERDPLow(0, (uint32_t) dequeue_ptr);
+  gcontroller->setERDPHigh(0, 0);
+}
+
 /*
  * According to xhci spec 5.5.2, secondary interrupters can be initialized
  * after R/S is set to 1 but before a event targeting it is generated.
@@ -91,11 +99,11 @@ void XHCIDriver::initializeInterrupter() {
   setERSTBALow(0, (uint32_t) &event_ring_segment_table);
   setERSTBAHigh(0, 0);
 
-  setERDPLow(0, event_ring.get_addr());
-  setERDPHigh(0, 0);
+  update_hc_event_ring_dequeue_ptr(event_ring.begin());
 }
 
 void XHCIDriver::initialize() {
+  gcontroller = this;
   initializeCommandRing();
   initializeContext();
   initializeInterrupter();
@@ -126,7 +134,7 @@ uint32_t XHCIDriver::allocate_device_slot() {
   // According to xhci spec 4.6.3, slot id 0 represents no slots available.
   assert(slot_id > 0);
 
-  // TODO: update event ring dequeue pointer
+  command_ring.update_shadow_dequeue_ptr(req);
   return slot_id;
 }
 
@@ -193,6 +201,7 @@ void XHCIDriver::sendCommand(TRBTemplate req) {
   CommandCompletionEventTRB command_comp = resp.expect_trb_type<CommandCompletionEventTRB>();
   command_comp.assert_trb_addr(req_addr);
   assert(command_comp.success());
+  command_ring.update_shadow_dequeue_ptr(req_addr);
 }
 
 static uint32_t add_context_flags_for_configure_endpoint(EndpointDescriptor& bulk_in, EndpointDescriptor bulk_out) {
@@ -279,6 +288,8 @@ void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest*
   assert(event_trb.success());
   assert(event_trb.endpoint_id == 1);
   assert(event_trb.slot_id == device->slot_id());
+
+  transfer_ring.update_shadow_dequeue_ptr(status_trb_addr);
 }
 
 static int get_endpoint_context_idx(const EndpointDescriptor& desc) {
@@ -323,8 +334,16 @@ void XHCIDriver::bulkTransfer(USBDevice<XHCIDriver>* device, const EndpointDescr
   ringDoorbell(device->slot_id(), get_endpoint_context_idx(desc));
 
   TRBTemplate event_trb_template = event_ring.dequeue();
+  if (!event_trb_template.to_trb_type<TransferEventTRB>()) {
+    HostControllerEventTRB* hce_trb = event_trb_template.to_trb_type<HostControllerEventTRB>();
+    if (hce_trb) {
+      printf("HostControllerEventTRB completion code %d\n", hce_trb->completion_code);
+    }
+    assert(false && "bulkTransfer fail to get a transfer event trb\n");
+  }
   TransferEventTRB event_trb = event_trb_template.expect_trb_type<TransferEventTRB>();
   event_trb.assert_trb_addr(expected_trb);
+  transfer_ring.update_shadow_dequeue_ptr(expected_trb);
   assert(!event_trb.has_residue());
   assert(event_trb.success());
   assert(event_trb.endpoint_id == get_endpoint_context_idx(desc));

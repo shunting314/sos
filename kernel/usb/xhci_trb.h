@@ -16,6 +16,7 @@ enum TRBType {
   TRANSFER_EVENT = 32,
   COMMAND_COMPLETION_EVENT = 33,
   PORT_STATUS_CHANGE_EVENT = 34,
+  HOST_CONTROLLER_EVENT = 37,
 };
 
 static const char* trb_type_str(TRBType trb_type) {
@@ -28,10 +29,14 @@ static const char* trb_type_str(TRBType trb_type) {
     return "enable_slot_command";
   case ADDRESS_DEVICE_COMMAND:
     return "address_device_command";
+  case TRANSFER_EVENT:
+    return "transfer_event";
   case COMMAND_COMPLETION_EVENT:
     return "command_completion_event";
   case PORT_STATUS_CHANGE_EVENT:
     return "port_status_change_event";
+  case HOST_CONTROLLER_EVENT:
+    return "host_controller_event";
   default:
     printf("Unknown trb_type %d\n", trb_type);
     assert(false);
@@ -73,8 +78,20 @@ class TRBTemplate : public TRBCommon {
 
   template <typename T>
   T expect_trb_type() const {
+    if (trb_type != T::TRB_TYPE()) {
+      printf("Expect %s trb, but got %s trb\n", trb_type_str(T::TRB_TYPE()), trb_type_str(trb_type));
+    }
     assert(trb_type == T::TRB_TYPE());
     return *(T*) this;
+  }
+
+  template <typename T>
+  T* to_trb_type() const {
+    if (trb_type == T::TRB_TYPE()) {
+      return (T*) this;
+    } else {
+      return nullptr;
+    }
   }
  public:
   uint64_t parameter;
@@ -132,6 +149,9 @@ class LinkTRB : public TRBCommon {
     trb_type = TRBType::LINK;
   }
 
+  static TRBType TRB_TYPE() {
+    return TRBType::LINK;
+  }
  public:
   uint32_t ring_segment_pointer_low;
   uint32_t ring_segment_pointer_high;
@@ -344,6 +364,7 @@ static_assert(sizeof(StatusStageTRB) == 16);
  */
 enum TRBCompletionCode {
   SUCCESS = 1,
+  EVENT_RING_FULL_ERROR = 21,
 };
 
 class TransferEventTRB : public TRBCommon {
@@ -419,3 +440,20 @@ class CommandCompletionEventTRB : public TRBCommon {
 };
 
 static_assert(sizeof(CommandCompletionEventTRB) == 16);
+
+class HostControllerEventTRB : public TRBCommon {
+ public:
+  static TRBType TRB_TYPE() {
+    return HOST_CONTROLLER_EVENT;
+  }
+ public:
+  uint64_t rsvd;
+  uint32_t rsvd1 : 24;
+  uint32_t completion_code : 8;
+  uint32_t c : 1;
+  uint32_t rsvd2 : 9;
+  uint32_t trb_type : 6;
+  uint32_t rsvd3 : 16;
+};
+
+static_assert(sizeof(HostControllerEventTRB) == 16);

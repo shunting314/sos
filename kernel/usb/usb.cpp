@@ -80,7 +80,16 @@ void setup_xhci() {
   // read a block from MSD
   uint8_t blockData[512];
   assert(sizeof(blockData) >= dev.blockSize());
+
+  #if 1
   dev.readBlocks(0, 1, blockData);
+  #else
+  // trigger ring wrap around
+  for (int iter = 0; iter < 512; ++iter) {
+    printf("Read iter %d\n", iter);
+    dev.readBlocks(0, 1, blockData);
+  }
+  #endif
   printf("Data from USB:\n");
   for (int i = 0; i < dev.blockSize(); ++i) {
     putchar((char) blockData[i]);

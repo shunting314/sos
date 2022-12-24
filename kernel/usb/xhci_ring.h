@@ -25,6 +25,14 @@ class TRBRing {
     assert((uint32_t) &trb_ring_ == (uint32_t) this);
     return (uint32_t) &trb_ring_;
   }
+
+  TRBTemplate* begin() {
+    return trb_ring_;
+  }
+
+  TRBTemplate* end() {
+    return (TRBTemplate*) trb_ring_ + sizeof(trb_ring_) / sizeof(*trb_ring_);
+  }
  protected:
   // 256 items
   TRBTemplate trb_ring_[4096 / sizeof(TRBTemplate)] __attribute__((aligned(4096))); 
@@ -36,6 +44,7 @@ class ProducerTRBRing : public TRBRing {
   explicit ProducerTRBRing(bool producer_cycle_state = true)
     : TRBRing(true),
       producer_cycle_state_(producer_cycle_state),
+      shadow_dequeue_ptr_(trb_ring_),
       enqueue_ptr_(trb_ring_) {
   }
 
@@ -44,21 +53,63 @@ class ProducerTRBRing : public TRBRing {
    * of the input argument but the copy inside the queue.
    */
   TRBTemplate* enqueue(TRBTemplate trb) {
+    // consume potential link TRB and calculate next_trb
+    // after the loop, we are safe to write the TRB into enqueue_ptr_
+    TRBTemplate* next_trb = nullptr;
+    while (true) {
+      assert(enqueue_ptr_->c != producer_cycle_state_);
+      next_trb = get_next_trb(enqueue_ptr_);
+      // TODO: we need better handling for ring overflow
+      assert(next_trb != shadow_dequeue_ptr_ && "producer ring overflow");
+
+      // advance pertential link trb
+      LinkTRB* link_trb = enqueue_ptr_->to_trb_type<LinkTRB>();
+      if (link_trb) {
+        link_trb->c = producer_cycle_state_;
+        if (link_trb->tc) {
+          producer_cycle_state_ = !producer_cycle_state_;
+        }
+        enqueue_ptr_ = next_trb;
+      } else {
+        break;
+      }
+    }
+
     TRBTemplate* ret = enqueue_ptr_;
     trb.c = producer_cycle_state_;
+    *enqueue_ptr_ = trb;
 
-    // TODO: handle the case of
-    // - link trb
-    // - queue full
-    printf("==== need revise ProducerTRBRing::enqueue ====\n");
-
-    *enqueue_ptr_++ = trb;
+    enqueue_ptr_ = next_trb;
     return ret;
   }
+
+  // Only producer ring uses link trb. Wrap around for ConsumderRing/event ring
+  // is easier to handle.
+  static TRBTemplate* get_next_trb(TRBTemplate* cur) {
+    if (cur->trb_type == TRBType::LINK) {
+      return (TRBTemplate*) (cur->expect_trb_type<LinkTRB>().ring_segment_pointer_low);
+    } else {
+      return cur + 1;
+    }
+  }
+
+  // TODO: in theory we could set shadow_dequeue_ptr_ to next(ptr_in_event_trb)?
+  void update_shadow_dequeue_ptr(TRBTemplate *ptr_in_event_trb) {
+    shadow_dequeue_ptr_ = ptr_in_event_trb;
+  }
+
  private:
+  // shadow the dequeue_ptr of the device. This may move slower than
+  // the device's copy of dequeue_ptr. Update this by the TRB pointer
+  // in event TRBs.
+  TRBTemplate* shadow_dequeue_ptr_;
   TRBTemplate* enqueue_ptr_;
   bool producer_cycle_state_;
 };
+
+// update the host controller's copy of the event ring dequeue ptr.
+// Assume a single event ring for now.
+void update_hc_event_ring_dequeue_ptr(TRBTemplate *dequeue_ptr);
 
 class ConsumerTRBRing : public TRBRing {
  public:
@@ -73,16 +124,21 @@ class ConsumerTRBRing : public TRBRing {
     }
     assert(hasItem());
     TRBTemplate item = *dequeue_ptr_++;
+
+    if (dequeue_ptr_ == end()) {
+      dequeue_ptr_ = trb_ring_;
+      consumer_cycle_state_ = !consumer_cycle_state_;
+    }
+
+    update_hc_event_ring_dequeue_ptr(dequeue_ptr_);
     return item;
   }
 
   bool hasItem() const {
-    // TODO: handle wrap around and segments
     return dequeue_ptr_->c == consumer_cycle_state_;
   }
 
   void skip_queued_trbs() {
-    // TODO: handle wrap around and segments
     while (hasItem()) {
       TRBTemplate item = dequeue();
       printf("Skip event trb %d (%s)\n", item.trb_type, trb_type_str((TRBType) item.trb_type));
@@ -90,6 +146,5 @@ class ConsumerTRBRing : public TRBRing {
   }
  private:
   TRBTemplate* dequeue_ptr_;
-  // TODO: update this when wrap around happens
   bool consumer_cycle_state_ = 1;
 };
