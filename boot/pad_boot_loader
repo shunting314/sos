@@ -1,9 +1,0 @@
-#!/bin/bash
-
-FSIZ=`wc -c out/boot/bootloader | awk '{print $1}'`
-echo "Beforing padding, bootloader size is $FSIZ"
-cp out/boot/bootloader out/boot/bootloader.bl
-truncate -s 510 out/boot/bootloader.bl
-echo -n -e "\x55\xaa" >> out/boot/bootloader.bl
-
-test "$FSIZ" -lt 510

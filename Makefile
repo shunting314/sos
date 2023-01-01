@@ -91,7 +91,8 @@ out/boot/bootloader.bl: out/boot/bootloader.o out/boot/load_kernel_and_enter.o
 	mkdir -p $(dir $@)
 	$(LD) $^ -Ttext 0x7c00 -e entry -o out/boot/bootloader.elf
 	$(OBJCOPY) -O binary out/boot/bootloader.elf out/boot/bootloader
-	boot/pad_boot_loader
+	cp out/boot/bootloader out/boot/bootloader.bl
+	python3 boot/adjust.py out/boot/bootloader.bl
 
 img out/kernel.img: out/kernel/kernel out/boot/bootloader.bl
 	kernel/check_kernel_size
