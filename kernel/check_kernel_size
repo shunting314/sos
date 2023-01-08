@@ -1,6 +1,14 @@
 #!/bin/bash
+set -x
+
 # TODO have trouble embedding this inside Makefile thus a standalone file
 
 FSIZ=`wc -c out/kernel/kernel | awk '{print $1}'`
-MAX_SIZE=`printf "%d\n" 0xF0000` # max kernel size
+
+# Here are the reason to pick this max kernel size:
+# For usb boot, we load the kernel elf file to address 0x10000
+# To be safe to not run over the VGA (0xB8000) we limit the kernel size
+# to be at most 0xA0000. The kernel can always load more extensions from
+# the file system later.
+MAX_SIZE=`printf "%d\n" 0xA0000`
 test "$FSIZ" -lt "$MAX_SIZE"

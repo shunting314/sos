@@ -3,6 +3,7 @@ CXX := i686-elf-g++
 LD := i686-elf-ld
 OBJCOPY := i686-elf-objcopy
 OBJDUMP := i686-elf-objdump
+STRIP := i686-elf-strip
 
 CLIB_SRC_C := $(wildcard clib/*.c)
 CLIB_SRC_CPP := $(wildcard clib/*.cpp)
@@ -25,10 +26,12 @@ ALL_OBJ := $(CLIB_OBJ) $(ULIB_OBJ) $(KERNEL_OBJ)
 # ignore missing files anyway.
 ALL_DEPS := $(patsubst %.o,%.d,$(ALL_OBJ))
 
+USB_BOOT := 1
+
 # -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
 # -Wno-pointer-arith allows arithmetic using void * assuming element size to be 1.
 #    This is only needed for C++. C compiler does not warn this by default.
-CFLAGS := -MD -I. -Icinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch -Wno-pointer-arith $(EXTRA_CFLAGS)
+CFLAGS := -MD -I. -Icinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch -Wno-pointer-arith -DUSB_BOOT=$(USB_BOOT) $(EXTRA_CFLAGS)
 
 # extra CFLAGS for boot loader
 BOOT_CFLAGS := -Os
@@ -87,9 +90,14 @@ out/kernel/kernel: kernel/kernel.ld $(KERNEL_OBJ) $(CLIB_OBJ)
 	$(LD) $(KERNEL_OBJ) $(CLIB_OBJ) -T kernel/kernel.ld -o $@
 	$(OBJDUMP) -dC $@ > out/kernel/kernel.asm
 
+ifeq ($(USB_BOOT), 1)
+out/boot/bootloader.bl: out/boot/usb_bootloader.o out/boot/usb_load_kernel_and_enter.o
+else
 out/boot/bootloader.bl: out/boot/bootloader.o out/boot/load_kernel_and_enter.o
+endif
 	mkdir -p $(dir $@)
 	$(LD) $^ -Ttext 0x7c00 -e entry -o out/boot/bootloader.elf
+	$(OBJDUMP) -dC out/boot/bootloader.elf > out/boot/bootloader.asm
 	$(OBJCOPY) -O binary out/boot/bootloader.elf out/boot/bootloader
 	cp out/boot/bootloader out/boot/bootloader.bl
 	python3 boot/adjust.py out/boot/bootloader.bl
@@ -97,18 +105,29 @@ out/boot/bootloader.bl: out/boot/bootloader.o out/boot/load_kernel_and_enter.o
 img out/kernel.img: out/kernel/kernel out/boot/bootloader.bl
 	kernel/check_kernel_size
 	cat out/boot/bootloader.bl out/kernel/kernel > out/kernel.img
-	truncate -s `printf "%d\n" 0x50200` out/kernel.img
+	truncate -s `printf "%d\n" 0xE0200` out/kernel.img
 
 # It's interesting to change QEMU source code by adding debugging code. E.g.
 # adding debugging code in hw/net/e1000.c in QEMU helps debugging the NIC driver.
 # Set QEMU_PREFIX to the directory of the installed QEMU if needed
 QEMU=$(QEMU_PREFIX)qemu-system-x86_64
 
+ifeq ($(USB_BOOT), 1)
+XHCI_OPTIONS := -device qemu-xhci,id=id_xhci -drive if=none,id=usbstick_2,format=raw,file=out/usb.img -device usb-storage,bus=id_xhci.0,drive=usbstick_2
+else
 UHCI_OPTIONS := -device piix4-usb-uhci,id=id_uhci -drive if=none,id=usbstick,format=raw,file=kernel/kernel_main.cpp -device usb-storage,bus=id_uhci.0,drive=usbstick
 
 XHCI_OPTIONS := -device qemu-xhci,id=id_xhci -drive if=none,id=usbstick_2,format=raw,file=kernel/kernel_main.cpp -device usb-storage,bus=id_xhci.0,drive=usbstick_2
+endif
 
 USB_OPTIONS := $(UHCI_OPTIONS) $(XHCI_OPTIONS)
+
+ifeq ($(USB_BOOT), 1)
+# usb boot don't need extra image options since everything is loaded from  usb
+img_options :=
+else
+img_options := -hda out/kernel.img -hdb fs.img
+endif
 
 # We put the filesystem in hdb rather than put it together with the kernel in hda
 # to make it easy to recreate kernel image while keeping the fs image.
@@ -120,7 +139,13 @@ run: out/kernel.img fs.img
 	#
 	# '-serial stdio' is added so the final content on the screen in the guest OS is available in the host terminal after terminating qemu.
 	#   One flaw: after adding this option, the first keyboard input is somehow lost.
-	$(QEMU) -display curses -monitor telnet::2000,server,nowait -hda out/kernel.img -hdb fs.img -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
+ifeq ($(USB_BOOT), 1)
+	cp out/kernel.img out/usb.img
+	truncate -s `printf "%d\n" 0x100000` out/usb.img
+        # the file system starts at 1MB offset
+	cat fs.img >> out/usb.img
+endif
+	$(QEMU) -display curses -monitor telnet::2000,server,nowait $(img_options) -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
 
 # start a connection to qemu monitor
 mon:

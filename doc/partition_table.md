@@ -16,3 +16,4 @@ A partition table entry contains 16 bytes. It has the following fields in that o
 - [Partition Type - wikipedia](https://en.wikipedia.org/wiki/Partition_type)
 - [Master Boot Record - osdev](https://wiki.osdev.org/MBR_(x86))
 - [Partition Table - osdev](https://wiki.osdev.org/Partition_Table)
+- [GUID Partition Table - wikipedia](https://en.wikipedia.org/wiki/GUID_Partition_Table): According to the MBR wikipedia page, GUID Partition Table (GPT) supersedes MBR.
