@@ -66,7 +66,7 @@ static_assert(sizeof(CommandStatusWrapper) == 13);
 template <typename ControllerDriver>
 class MassStorageDevice : public USBDevice<ControllerDriver> {
  public:
-  explicit MassStorageDevice(ControllerDriver* driver) : USBDevice<ControllerDriver>(driver) { }
+  explicit MassStorageDevice(ControllerDriver* driver = nullptr) : USBDevice<ControllerDriver>(driver) { }
 
   void readCapacity() {
     scsi::ReadCapacity10 cmd;

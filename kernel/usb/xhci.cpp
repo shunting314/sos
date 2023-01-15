@@ -71,6 +71,7 @@ EventRingSegmentTableEntry::EventRingSegmentTableEntry(const TRBRing& trb_ring) 
   ring_segment_size = trb_ring.trb_capacity();
 }
 
+// TODO consolidate with xhch_driver in usb.cpp
 XHCIDriver* gcontroller = nullptr;
 
 void update_hc_event_ring_dequeue_ptr(TRBTemplate *dequeue_ptr) {

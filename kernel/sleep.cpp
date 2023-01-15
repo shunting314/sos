@@ -2,6 +2,29 @@
 #include <kernel/idt.h>
 #include <assert.h>
 
+/*
+ * A dumb sleep. Assumes the loop is not optimized away by the compiler.
+ */
+void dumbsleep(int niter) {
+  for (int i = 0; i < niter; ++i) {
+    for (int j = 0; j < 1000000; ++j) {
+    }
+  }
+}
+
+/*
+ * Execute hlt or relying on tick is dangerous. We use InterruptGate to setup IDT.
+ * So interrupts are disabled when interruptes/exceptions happens. If the open/read  * system call is triggered by user code and the service routine for these system
+ * calls need to call msleep (e.g., used somewhere when accessing USB Drive), we
+ * stuck in the 'hlt' instruction!
+ *
+ * Even if we remove the hlt instruction, we still stuck since nobody update the
+ * tick when the timer interrupt is disabled.
+ *
+ * Ultimately to make msleep work when entering kernel from user space, we should
+ * not use InterruptGate but keep interrupt enabled when entering kernel. But that's
+ * complex and we can consider this in the future.
+ */
 void msleep(int nms) {
   int64_t start_tick = getTick();
   // 1 tick == 10 ms

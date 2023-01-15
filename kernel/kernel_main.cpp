@@ -28,7 +28,6 @@ extern "C" void kernel_main() {
   setup_phys_page_freelist();
   setup_paging();
   setup_tss();
-  SimFs::get().init();
 
   lspci();
   collect_pci_devices();
@@ -41,5 +40,6 @@ extern "C" void kernel_main() {
   }
 #endif
   usb_init();
+  SimFs::get().init();
   kshell();
 }

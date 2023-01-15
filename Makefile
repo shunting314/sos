@@ -142,7 +142,7 @@ run: out/kernel.img fs.img
 ifeq ($(USB_BOOT), 1)
 	cp out/kernel.img out/usb.img
 	truncate -s `printf "%d\n" 0x100000` out/usb.img
-        # the file system starts at 1MB offset
+	# the file system starts at 1MB offset
 	cat fs.img >> out/usb.img
 endif
 	$(QEMU) -display curses -monitor telnet::2000,server,nowait $(img_options) -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)

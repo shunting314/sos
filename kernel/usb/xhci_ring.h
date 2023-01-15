@@ -120,7 +120,7 @@ class ConsumerTRBRing : public TRBRing {
   TRBTemplate dequeue() {
     // TODO: this is a blocking call right now
     while (!hasItem()) {
-      msleep(1);
+      dumbsleep(1);
     }
     assert(hasItem());
     TRBTemplate item = *dequeue_ptr_++;

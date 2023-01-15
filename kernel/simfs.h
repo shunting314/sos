@@ -11,9 +11,18 @@
 
 #include <stdint.h>
 #include <string.h>
+
+#if USB_BOOT
+#include <kernel/usb/xhci.h>
+#include <kernel/usb/msd.h>
+#else
 #include <kernel/ide.h>
+#endif
 
 // max file/subdir name size 63 following by '\0'
+#ifndef SECTOR_SIZE
+#define SECTOR_SIZE 512
+#endif
 #define NAME_BUF_SIZE 64
 #define BLOCK_SIZE 4096
 #define SECTORS_PER_BLOCK ((BLOCK_SIZE / SECTOR_SIZE))
@@ -219,7 +228,11 @@ class SimFs {
   static int blockIdToSectorNo(int blockId);
 
   static SimFs instance_;
+#if USB_BOOT
+  MassStorageDevice<XHCIDriver> dev_;
+#else
   IDEDevice dev_;
+#endif
   SuperBlock superBlock_;
 };
 

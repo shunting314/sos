@@ -67,43 +67,55 @@ void setup_uhci() {
   #endif
 }
 
+// TODO avoid using this global variable
+MassStorageDevice<XHCIDriver> msd_dev;
+
 void setup_xhci() {
   assert(xhci_func);
   xhci_driver = XHCIDriver(xhci_func);
   xhci_driver.reset();
 
   // TODO: we should not assume a mass storage device but detect the device type.
-  MassStorageDevice dev(&xhci_driver);
-  xhci_driver.initializeDevice(&dev);
+  msd_dev = MassStorageDevice(&xhci_driver);
+  xhci_driver.initializeDevice(&msd_dev);
 
-  dev.readCapacity();
+  msd_dev.readCapacity();
   // read a block from MSD
   uint8_t blockData[512];
-  assert(sizeof(blockData) >= dev.blockSize());
+  assert(sizeof(blockData) >= msd_dev.blockSize());
 
   #if 1
-  dev.readBlocks(0, 1, blockData);
+  msd_dev.readBlocks(0, 1, blockData);
   #else
   // trigger ring wrap around
   for (int iter = 0; iter < 512; ++iter) {
     printf("Read iter %d\n", iter);
-    dev.readBlocks(0, 1, blockData);
+    msd_dev.readBlocks(0, 1, blockData);
   }
   #endif
+
+  #if USB_BOOT
+  // in usb boot, the first sector of the USB drive is the MBR, do hex dump
+  // dump the first 2 and the last 2 paragraphs
+  hexdump(blockData, 32);
+  printf("...\n");
+  hexdump(blockData + msd_dev.blockSize() - 32, 32);
+  #else
   printf("Data from USB:\n");
-  for (int i = 0; i < dev.blockSize(); ++i) {
+  for (int i = 0; i < msd_dev.blockSize(); ++i) {
     putchar((char) blockData[i]);
   }
   printf("\n");
+  #endif
 
   // write a block to MSD. Disable by default to avoid mutate the media
   #if 0
   uint8_t sendData[512];
-  assert(sizeof(sendData) >= dev.blockSize());
-  for (int i = 0; i < dev.blockSize(); ++i) {
+  assert(sizeof(sendData) >= msd_dev.blockSize());
+  for (int i = 0; i < msd_dev.blockSize(); ++i) {
     sendData[i] = (i % 26 + 'a');
   }
-  dev.writeBlocks(0, 1, sendData);
+  msd_dev.writeBlocks(0, 1, sendData);
   printf("Done writing a block to MSD\n");
   #endif
 }

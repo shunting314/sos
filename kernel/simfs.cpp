@@ -126,8 +126,22 @@ int DirEnt::write(int pos, int size, const void* buf) {
 		writeBlockForOff(pos, block_cont);
 		return write(pos + ncpy, size - ncpy, buf + ncpy) + ncpy;
 	} else {
+    #if 0
 		// whole block. no need to read the block from the disk first
     writeBlockForOff(pos, (const char*) buf);
+    #else
+    // NOTE: even if we don't ready need to copy a block from buf to block_cont,
+    // we still do that.
+    // The reason is buf may be an address from user space, which does not equal
+    // to the physical address. Copy the content over to the kernel buffer so
+    // we can use the virtual address as physically address directly.
+    //
+    // A physical address is needed to do DMA for USB drive.
+    //
+    // TODO: create a function to return physical address given a virtual address
+    memmove(block_cont, buf, BLOCK_SIZE);
+    writeBlockForOff(pos, block_cont);
+    #endif
     return write(pos + BLOCK_SIZE, size - BLOCK_SIZE, buf + BLOCK_SIZE) + BLOCK_SIZE;
 	}
 }
@@ -146,6 +160,15 @@ void DirEnt::writeBlockForOff(int off, const char *buf) {
 
 SimFs SimFs::instance_;
 
+#define USB_SECTOR_OFF ((0x100000 / SECTOR_SIZE))
+int blockIdToUSBSectorNo(int blockId) {
+  return blockId * SECTORS_PER_BLOCK + USB_SECTOR_OFF; 
+}
+
+int SimFs::blockIdToSectorNo(int blockId) {
+  return blockId * SECTORS_PER_BLOCK;
+}
+
 /*
  * buf should have enough space to store the entire block even if
  * len < BLOCK_SIZE. Treat len as an hint so readBlock can read less
@@ -156,18 +179,33 @@ void SimFs::readBlock(int blockId, uint8_t buf[], int len) {
 
   // TODO take advantage of len
 
+#if USB_BOOT
+  // a usb block is actually a sector
+  dev_.readBlocks(blockIdToUSBSectorNo(blockId), SECTORS_PER_BLOCK, buf);
+#else
   dev_.read(buf, blockIdToSectorNo(blockId), SECTORS_PER_BLOCK);
+#endif
 }
 
-int SimFs::blockIdToSectorNo(int blockId) {
-  return blockId * SECTORS_PER_BLOCK;
+void SimFs::writeBlock(int blockId, const uint8_t* buf) {
+#if USB_BOOT
+  dev_.writeBlocks(blockIdToUSBSectorNo(blockId), SECTORS_PER_BLOCK, buf);
+#else
+	dev_.write(buf, blockIdToSectorNo(blockId), SECTORS_PER_BLOCK);
+#endif
 }
 
 void SimFs::init() {
+  uint8_t buf[BLOCK_SIZE];
+#if USB_BOOT
+  extern MassStorageDevice<XHCIDriver> msd_dev;
+  dev_ = msd_dev;
+#else
   // hardcode to use the slave IDE device for the filesystem for now
   dev_ = createSlaveIDE();
-  uint8_t buf[BLOCK_SIZE];
+#endif
   readBlock(0, buf, sizeof(SuperBlock));
+
   superBlock_ = *((SuperBlock*) buf);
   printf("Total number of block in super block %d\n", superBlock_.tot_block);
 }
@@ -277,10 +315,6 @@ void SimFs::flushSuperBlock() {
 	// TODO: we can avoid writing the whole block
 	memmove(buf, (void*) &superBlock_, sizeof(SuperBlock));
 	writeBlock(0, (const uint8_t*) buf);
-}
-
-void SimFs::writeBlock(int blockId, const uint8_t* buf) {
-	dev_.write(buf, blockIdToSectorNo(blockId), SECTORS_PER_BLOCK);
 }
 
 /*
