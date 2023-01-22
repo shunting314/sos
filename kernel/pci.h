@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <kernel/ioport.h>
+#include <kernel/pci_ids.h>
 
 #define PORT_CONFIG_ADDRESS 0xCF8
 #define PORT_CONFIG_DATA 0xCFC
@@ -248,12 +249,6 @@ class PCIFunction {
     write_config<uint32_t>(CONFIG_OFF_COMMAND_STATUS, oldval | (1 << COMMAND_STATUS_BUS_MASTER_BIT));
   }
 
- private:
-  // the highest byte of the config address should be 0x80
-  uint32_t get_config_address(uint8_t offset) const {
-    return (0x80 << 24) | (bus_id_ << 16) | (dev_id_ << 11) | (func_id_ << 8) | offset;
-  }
-
   template <typename T>
   void write_config(uint8_t offset, uint32_t newval) const {
     uint32_t item_size = sizeof(T);
@@ -286,6 +281,12 @@ class PCIFunction {
     }
     return data;
   }
+ private:
+  // the highest byte of the config address should be 0x80
+  uint32_t get_config_address(uint8_t offset) const {
+    return (0x80 << 24) | (bus_id_ << 16) | (dev_id_ << 11) | (func_id_ << 8) | offset;
+  }
+
   uint32_t bus_id_;
   uint32_t dev_id_;
   uint32_t func_id_;

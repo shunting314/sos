@@ -112,6 +112,16 @@ class XHCIDriver : public USBControllerDriver {
   explicit XHCIDriver(const PCIFunction& pci_func = PCIFunction()) : USBControllerDriver(pci_func) {
     if (pci_func_) {
       membar_ = setupMembar();
+      if (pci_func_.vendor_id() == PCI_VENDOR_INTEL && pci_func_.device_id() == PCI_DEVICE_INTEL_PANTHER_POINT_XHCI) {
+        /*
+         * Follow Linux Kernel ( https://github.com/torvalds/linux/blob/f883675bf6522b52cd75dc3de791680375961769/drivers/usb/host/pci-quirks.c#L1021-L1038 ) and haiku os ( https://github.com/haiku/haiku/blob/9d51367f16a37bf8a309f3b7feb31a8d1d8c89ee/src/add-ons/kernel/busses/usb/xhci.cpp#L590 )
+         * for the special handling of intel panther point chipset.
+         */
+        uint32_t val = pci_func_.read_config<uint32_t>(PCI_CONFIG_INTEL_USB3PRM);
+        pci_func_.write_config<uint32_t>(PCI_CONFIG_INTEL_USB3_PSSEN, val);
+        val = pci_func_.read_config<uint32_t>(PCI_CONFIG_INTEL_USB2PRM);
+        pci_func_.write_config<uint32_t>(PCI_CONFIG_INTEL_XUSB2PR, val);
+      }
     }
   }
 
@@ -128,6 +138,12 @@ class XHCIDriver : public USBControllerDriver {
     printf("RTSOFF %d\n", getRTSOff());
     opRegBase_ = (void *) membar_.get_addr() + getCapLength();
     runtimeRegBase_ = (void *) membar_.get_addr() + getRTSOff();
+
+    printf("USB is running already? %d\n", getUSBCmd() & 0x1);
+    printf("Max port %d\n", getMaxPort());
+    for (int port_no = 1; port_no <= getMaxPort(); ++port_no) {
+      printf("port %d sc 0x%x\n", port_no, getPortSC(port_no));
+    }
 
     // the controller is in a running state if a usb drive is attached at the
     // beginning. Stop it first.
@@ -163,10 +179,6 @@ class XHCIDriver : public USBControllerDriver {
     assert((getUSBCmd() & (1 << 1)) == 0);
     printf("Max slots %d\n", getMaxSlots());
     printf("Max interrupters %d\n", getMaxInterrupters());
-    printf("Max port %d\n", getMaxPort());
-    for (int port_no = 1; port_no <= getMaxPort(); ++port_no) {
-      printf("port %d sc 0x%x\n", port_no, getPortSC(port_no));
-    }
 
     initialize();
     setUSBCmdFlags(1 << 0); // set the run/stop bit
@@ -176,7 +188,12 @@ class XHCIDriver : public USBControllerDriver {
     assert((getUSBSts() & 0x1) == 0); // not halted
 
     // resetting the root hub port will reset the attached device
-    resetPort(1);
+    for (int port_no = 1; port_no <= getMaxPort(); ++port_no) {
+      if (getPortSC(port_no) & 1) {
+        // reset the port only if there is a device attached
+        resetPort(port_no);
+      }
+    }
   }
  
   void initializeDevice(USBDevice<XHCIDriver>* dev);

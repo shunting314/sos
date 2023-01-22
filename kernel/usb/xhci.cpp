@@ -29,8 +29,13 @@ void XHCIDriver::initializeCommandRing() {
   setCRCRHigh(crcc.getHigh32());
 
   assert(getCRCRHigh() == 0);
+
+  // getCRCRLow() may return 0 for my toshiba laptop. Maybe the hardware is too
+  // old and does not follow the spec.
+  #if 0
   // the equality holds since the lowest 6 bits of CRCR are all 0
   assert((getCRCRLow() & ~63)  == (uint32_t) &command_ring);
+  #endif
 }
 
 // NOTE: 256 may be more then needed since MaxSlots reported by the xHC
@@ -111,6 +116,7 @@ void XHCIDriver::initialize() {
 }
 
 void XHCIDriver::resetPort(int port_no) {
+  printf("before reset, port %d, sc 0x%x\n", port_no, getPortSC(port_no));
   setPortSCFlags(port_no, 1 << 4); // port reset
   // the bit will be cleared by xHC
   while (getPortSC(port_no) & (1 << 4)) {
@@ -118,8 +124,15 @@ void XHCIDriver::resetPort(int port_no) {
   }
   // port reset change bit should be 1 after reset is done
   assert(getPortSC(port_no) & (1 << 21));
+
+  // doing the following on my toshiba laptop cause the current 
+  // connect status bit (bit 0) to be reset to 0
+  #if 0
   setPortSC(port_no, 1 << 21); // write clear the PRC bit
   assert((getPortSC(port_no) & (1 << 21)) == 0);
+  #endif
+
+  printf("After reset, port %d, sc 0x%x\n", port_no, getPortSC(port_no));
 }
 
 uint32_t XHCIDriver::allocate_device_slot() {

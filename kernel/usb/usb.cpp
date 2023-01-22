@@ -72,6 +72,7 @@ MassStorageDevice<XHCIDriver> msd_dev;
 
 void setup_xhci() {
   assert(xhci_func);
+
   xhci_driver = XHCIDriver(xhci_func);
   xhci_driver.reset();
 

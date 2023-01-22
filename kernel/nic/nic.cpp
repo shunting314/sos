@@ -27,6 +27,10 @@ void nic_init() {
     // the 82540EM Gigabit Ethernet Controller
     _nic_driver_82540EM = NICDriver_82540EM(ethernet_controller_pci_func);
     nic_driver = &_nic_driver_82540EM;
+    printf("Found a 82540EM gigabit ethernet controller\n");
+  } else {
+    printf("No driver found for the ethernet controler vendor id 0x%x, device id 0x%x\n", ethernet_controller_pci_func.vendor_id(), ethernet_controller_pci_func.device_id());
+    return;
   }
   assert(nic_driver);
   self_mac = nic_driver->getMACAddr();
