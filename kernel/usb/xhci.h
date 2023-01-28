@@ -181,6 +181,12 @@ class XHCIDriver : public USBControllerDriver {
     printf("Max interrupters %d\n", getMaxInterrupters());
 
     initialize();
+
+    // even if config register already contains the target value,
+    // we still need this assignment. Otherwise EnableSlot command
+    // may fail because of no slot available.
+    setConfig(getMaxSlots());
+
     setUSBCmdFlags(1 << 0); // set the run/stop bit
     while (getUSBSts() & 0x1) {
       msleep(1);
@@ -205,6 +211,7 @@ class XHCIDriver : public USBControllerDriver {
   void initializeInterrupter();
   void initialize();
   uint32_t allocate_device_slot();
+  void setup_slot(uint32_t slot_id);
   uint32_t assign_usb_device_address(uint32_t slot_id);
 
   // API for capability registers
@@ -229,6 +236,17 @@ class XHCIDriver : public USBControllerDriver {
 
   uint32_t getHCSParams1() {
     return *(uint32_t*) getCapRegPtr(XHCICapRegOff::HCSPARAMS1);
+  }
+
+  /*
+   * Get the number of scratchpad buffers needed by the controller.
+   * System software should allocate these buffers up before starting
+   * the controller.
+   */
+  uint32_t getMaxScratchpadBuffers() {
+    uint32_t full = getHCSParams2();
+    uint32_t num = (full >> 27) | (((full >> 21) & 0x1F) << 5);
+    return num;
   }
 
   uint32_t getHCSParams2() {
@@ -320,6 +338,10 @@ class XHCIDriver : public USBControllerDriver {
 
   uint32_t getConfig() {
     return *getOpRegPtr(XHCIOpRegOff::CONFIG);
+  }
+
+  void setConfig(uint32_t config) {
+    *getOpRegPtr(XHCIOpRegOff::CONFIG) = config;
   }
 
   // port_no starts from 1

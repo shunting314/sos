@@ -12,7 +12,7 @@ ProducerTRBRing command_ring;
 // TODO: support multiple event ring
 ConsumerTRBRing event_ring;
 
-#define AVAIL_TRANSFER_RINGS 8
+#define AVAIL_TRANSFER_RINGS 128
 ProducerTRBRing transfer_ring_pool[AVAIL_TRANSFER_RINGS];
 ProducerTRBRing& allocate_transfer_ring() {
   static int next_avail = 0;
@@ -36,6 +36,11 @@ void XHCIDriver::initializeCommandRing() {
   // the equality holds since the lowest 6 bits of CRCR are all 0
   assert((getCRCRLow() & ~63)  == (uint32_t) &command_ring);
   #endif
+
+  // setup devices slots
+  for (int slot_id = 1; slot_id <= getMaxSlots(); ++slot_id) {
+    setup_slot(slot_id);
+  }
 }
 
 // NOTE: 256 may be more then needed since MaxSlots reported by the xHC
@@ -56,7 +61,23 @@ InputContext globalInputContextList[256];
 void XHCIDriver::initializeContext() {
   constexpr int nCtx = sizeof(globalDeviceContextList) / sizeof(*globalDeviceContextList);
   assert(getMaxSlots() <= nCtx);
-  globalDeviceContextBaseAddrArray[0] = 0;
+  
+  // refer to xhci spec '4.20 Scratchpad Buffers' for details.
+  int numScratchpad = getMaxScratchpadBuffers();
+  if (numScratchpad > 0) {
+    assert(numScratchpad * 8 <= 4096);
+    globalDeviceContextBaseAddrArray[0] = alloc_phys_page();
+    uint64_t* ptr = (uint64_t*) globalDeviceContextBaseAddrArray[0];
+    memset(ptr, 0, 4096);
+    for (int i = 0; i < numScratchpad; ++i) {
+      uint32_t addr = alloc_phys_page();
+      memset((void*) addr, 0, 4096);
+      ptr[i] = addr;
+    }
+  } else {
+    globalDeviceContextBaseAddrArray[0] = 0;
+  }
+
   for (int i = 1; i < nCtx; ++i) {
     globalDeviceContextBaseAddrArray[i] = (uint32_t) &globalDeviceContextList[i];
   }
@@ -185,7 +206,7 @@ void XHCIDriver::initEndpointContext(InputContext& input_context, EndpointDescri
   ep_context.cerr = 3;
 }
 
-uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
+void XHCIDriver::setup_slot(uint32_t slot_id) {
   InputContext& input_context = globalInputContextList[slot_id];
   DeviceContext& output_context = globalDeviceContextList[slot_id];
   input_context.control_context().include_add_context_flags(0x3);
@@ -199,7 +220,11 @@ uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
     input_slot_context.context_entries = 1;
   }
   initEndpoint0Context(input_context);
+}
 
+uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
+  InputContext& input_context = globalInputContextList[slot_id];
+  DeviceContext& output_context = globalDeviceContextList[slot_id];
   // xhci spec 4.3.4: address assignment
   sendCommand(AddressDeviceCommandTRB((uint32_t) &input_context, slot_id).toTemplate());
 

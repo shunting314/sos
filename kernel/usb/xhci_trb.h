@@ -364,8 +364,22 @@ static_assert(sizeof(StatusStageTRB) == 16);
  */
 enum TRBCompletionCode {
   SUCCESS = 1,
+  NO_SLOTS_AVAILABLE_ERROR = 9,
   EVENT_RING_FULL_ERROR = 21,
 };
+
+static const char* completion_code_to_str(int code) {
+  switch (code) {
+  case SUCCESS:
+    return "success";
+  case EVENT_RING_FULL_ERROR:
+    return "event_ring_full_error";
+  case NO_SLOTS_AVAILABLE_ERROR:
+    return "no_slots_available_error";
+  default:
+    return "unknown";
+  }
+}
 
 class TransferEventTRB : public TRBCommon {
  public:
@@ -386,7 +400,7 @@ class TransferEventTRB : public TRBCommon {
   // TODO: avoid dupliate the code with CommandCompletionEventTRB
   bool success() {
     if (completion_code != (int) TRBCompletionCode::SUCCESS) {
-      printf("Command fail with code %d\n", completion_code);
+      printf("Command fail with code %d (%s)\n", completion_code, completion_code_to_str(completion_code));
     }
     return completion_code == (int) TRBCompletionCode::SUCCESS; 
   }
@@ -423,7 +437,7 @@ class CommandCompletionEventTRB : public TRBCommon {
 
   bool success() {
     if (completion_code != (int) TRBCompletionCode::SUCCESS) {
-      printf("Command fail with code %d\n", completion_code);
+      printf("Command fail with code %d (%s)\n", completion_code, completion_code_to_str(completion_code));
     }
     return completion_code == (int) TRBCompletionCode::SUCCESS; 
   }
