@@ -201,6 +201,20 @@ class XHCIDriver : public USBControllerDriver {
       }
     }
   }
+
+  // this method assumes there is exactly 1 port with device attached and return its
+  // port number
+  int getSolePortNo() {
+    int found_port_no = -1;
+    for (int port_no = 1; port_no <= getMaxPort(); ++port_no) {
+      if (getPortSC(port_no) & 1) {
+        assert(found_port_no < 0);
+        found_port_no = port_no;
+      }
+    }
+    assert(found_port_no > 0);
+    return found_port_no;
+  }
  
   void initializeDevice(USBDevice<XHCIDriver>* dev);
   void configureEndpoints(USBDevice<XHCIDriver>* dev);
@@ -211,7 +225,7 @@ class XHCIDriver : public USBControllerDriver {
   void initializeInterrupter();
   void initialize();
   uint32_t allocate_device_slot();
-  void setup_slot(uint32_t slot_id);
+  void setup_slot(uint32_t slot_id, int port_no);
   uint32_t assign_usb_device_address(uint32_t slot_id);
 
   // API for capability registers

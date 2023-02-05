@@ -36,11 +36,6 @@ void XHCIDriver::initializeCommandRing() {
   // the equality holds since the lowest 6 bits of CRCR are all 0
   assert((getCRCRLow() & ~63)  == (uint32_t) &command_ring);
   #endif
-
-  // setup devices slots
-  for (int slot_id = 1; slot_id <= getMaxSlots(); ++slot_id) {
-    setup_slot(slot_id);
-  }
 }
 
 // NOTE: 256 may be more then needed since MaxSlots reported by the xHC
@@ -206,7 +201,7 @@ void XHCIDriver::initEndpointContext(InputContext& input_context, EndpointDescri
   ep_context.cerr = 3;
 }
 
-void XHCIDriver::setup_slot(uint32_t slot_id) {
+void XHCIDriver::setup_slot(uint32_t slot_id, int port_no) {
   InputContext& input_context = globalInputContextList[slot_id];
   DeviceContext& output_context = globalDeviceContextList[slot_id];
   input_context.control_context().include_add_context_flags(0x3);
@@ -215,7 +210,7 @@ void XHCIDriver::setup_slot(uint32_t slot_id) {
   {
     // initialize input slot context
     SlotContext& input_slot_context = input_context.device_context().slot_context();
-    input_slot_context.root_hub_port_number = 1; // TODO avoid hardcoding
+    input_slot_context.root_hub_port_number = port_no;
     input_slot_context.route_string = 0;
     input_slot_context.context_entries = 1;
   }
@@ -272,6 +267,9 @@ void XHCIDriver::configureEndpoints(USBDevice<XHCIDriver>* dev) {
 void XHCIDriver::initializeDevice(USBDevice<XHCIDriver> *dev) {
   uint32_t slot_id = allocate_device_slot();
   printf("Got device slot %d\n", slot_id);
+
+  int port_no = getSolePortNo();
+  setup_slot(slot_id, port_no);
 
   uint32_t usb_device_address = assign_usb_device_address(slot_id);
   printf("Assigned usb device address %d\n", usb_device_address);
