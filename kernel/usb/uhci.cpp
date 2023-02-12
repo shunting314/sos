@@ -180,13 +180,13 @@ void UHCIDriver::setupFramePtrs() {
 }
 
 void UHCIDriver::sendDeviceRequest(USBDevice<UHCIDriver>* device, DeviceRequest* req, void *buf) {
-  int maxPacketLength = device->getMaxPacketLength();
+  int maxPacketSize = device->getMaxPacketSize();
   int maxLength = req->wLength;
   assert((maxLength > 0 && buf) || (maxLength == 0 && !buf));
   uint8_t reqType = req->bmRequestType;
 
   // need 2 more for the SETUP and STATUS packets
-  int ntd = (maxLength + maxPacketLength - 1) / maxPacketLength + 2;
+  int ntd = (maxLength + maxPacketSize - 1) / maxPacketSize + 2;
   TransferDescriptor* tds = reserveTDs(ntd);
   TransferDescriptor* reqTD = &tds[0];
 
@@ -205,7 +205,7 @@ void UHCIDriver::sendDeviceRequest(USBDevice<UHCIDriver>* device, DeviceRequest*
   uint8_t payload_pid = (reqType & 0x80) ? PID_IN : PID_OUT;
   for (int i = 1; i < ntd - 1; ++i) {
     TransferDescriptor* cur = &tds[i];
-    int len = min(maxPacketLength, maxLength - off);
+    int len = min(maxPacketSize, maxLength - off);
     assert(len > 0);
     *cur = TransferDescriptor(
       cur + 1,

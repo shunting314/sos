@@ -168,11 +168,12 @@ uint32_t XHCIDriver::allocate_device_slot() {
   return slot_id;
 }
 
-void XHCIDriver::initEndpoint0Context(InputContext& input_context) {
+void XHCIDriver::initEndpoint0Context(InputContext& input_context, int max_packet_size) {
   ProducerTRBRing& transfer_ring = allocate_transfer_ring();
   EndpointContext& ep0_context = input_context.device_context().endpoint_context(0);
   ep0_context.ep_type = EndpointType::CONTROL;
-  ep0_context.max_packet_size = 8; // TODO how to decide the value of this field?
+  ep0_context.max_packet_size = max_packet_size;
+  printf("ep0 max packet size is %d\n", max_packet_size);
   ep0_context.max_burst_size = 0;
   ep0_context.set_tr_dequeue_pointer(transfer_ring.get_addr());
   ep0_context.dcs = 1;
@@ -201,7 +202,7 @@ void XHCIDriver::initEndpointContext(InputContext& input_context, EndpointDescri
   ep_context.cerr = 3;
 }
 
-void XHCIDriver::setup_slot(uint32_t slot_id, int port_no) {
+void XHCIDriver::setup_slot(uint32_t slot_id, int port_no, int max_packet_size) {
   InputContext& input_context = globalInputContextList[slot_id];
   DeviceContext& output_context = globalDeviceContextList[slot_id];
   input_context.control_context().include_add_context_flags(0x3);
@@ -214,7 +215,7 @@ void XHCIDriver::setup_slot(uint32_t slot_id, int port_no) {
     input_slot_context.route_string = 0;
     input_slot_context.context_entries = 1;
   }
-  initEndpoint0Context(input_context);
+  initEndpoint0Context(input_context, max_packet_size);
 }
 
 uint32_t XHCIDriver::assign_usb_device_address(uint32_t slot_id) {
@@ -269,7 +270,8 @@ void XHCIDriver::initializeDevice(USBDevice<XHCIDriver> *dev) {
   printf("Got device slot %d\n", slot_id);
 
   int port_no = getSolePortNo();
-  setup_slot(slot_id, port_no);
+  dev->setMaxPacketSizeByPortSpeed(getPortSpeed(port_no));
+  setup_slot(slot_id, port_no, dev->getMaxPacketSize());
 
   uint32_t usb_device_address = assign_usb_device_address(slot_id);
   printf("Assigned usb device address %d\n", usb_device_address);
@@ -302,12 +304,12 @@ void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest*
 
   transfer_ring.enqueue(SetupStageTRB(device_req).toTemplate());
 
-  int maxPacketLength = device->getMaxPacketLength();
-  int ndata_trb = (device_req->wLength + maxPacketLength - 1) / maxPacketLength;
+  int maxPacketSize = device->getMaxPacketSize();
+  int ndata_trb = (device_req->wLength + maxPacketSize - 1) / maxPacketSize;
 
   uint32_t off = 0, len;
   for (int i = 0; i < ndata_trb; ++i) {
-    len = min(maxPacketLength, device_req->wLength - off);
+    len = min(maxPacketSize, device_req->wLength - off);
     assert(len > 0);
     auto data_trb = DataStageTRB((uint32_t) buf + off, len, i != ndata_trb - 1, ndata_trb - i - 1, !!(device_req->bmRequestType & 0x80));
     transfer_ring.enqueue(data_trb.toTemplate());
@@ -320,9 +322,9 @@ void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest*
 
   TRBTemplate event_trb_template = event_ring.dequeue();
   TransferEventTRB event_trb = event_trb_template.expect_trb_type<TransferEventTRB>();
+  assert(event_trb.success());
   event_trb.assert_trb_addr(status_trb_addr);
   assert(!event_trb.has_residue());
-  assert(event_trb.success());
   assert(event_trb.endpoint_id == 1);
   assert(event_trb.slot_id == device->slot_id());
 

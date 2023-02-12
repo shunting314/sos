@@ -127,9 +127,37 @@ class USBDevice {
     return configVal;
   }
 
-  uint16_t getMaxPacketLength() {
-    // TODO: 8 is quite conservative. Can we use a larger value here?
-    return 8;
+  /*
+   * xhci spec '4.3 USB Device Initialization' item 7 mentions, for LS, HS, and SS
+   * devices, 8, 64 and 512 bytes, respectively, are the only packet sizes allowed
+   * for the Default Control Endpoint.
+   *
+   * For FS device, I'll set max packet size to 8 as Haiku os does.
+   * We can update it with the information we get from DeviceDescriptor later
+   * if we want.
+   */
+  void setMaxPacketSizeByPortSpeed(int portSpeed) {
+    switch (portSpeed) {
+    case 1: // FS
+    case 2: // LS
+      max_packet_size_ = 8;
+      break;
+    case 3: // HS
+      max_packet_size_ = 64;
+      break;
+    case 4: // SS
+      max_packet_size_ = 512;
+      break;
+    default:
+      printf("Unsupported port speed %d\n", portSpeed);
+      assert(false && "Unsupported port speed");
+    }
+  }
+
+  // max packet length for endpoint 0
+  uint16_t getMaxPacketSize() {
+    assert(max_packet_size_ > 0);
+    return max_packet_size_;
   }
 
   uint8_t getAddr() const { return addr_; }
@@ -228,4 +256,5 @@ class USBDevice {
 
   // only needed for XHCI
   uint32_t slot_id_ = -1;
+  int max_packet_size_ = -1; // max packet size for endpoint 0
 };

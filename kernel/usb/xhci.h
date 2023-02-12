@@ -225,7 +225,7 @@ class XHCIDriver : public USBControllerDriver {
   void initializeInterrupter();
   void initialize();
   uint32_t allocate_device_slot();
-  void setup_slot(uint32_t slot_id, int port_no);
+  void setup_slot(uint32_t slot_id, int port_no, int max_packet_size);
   uint32_t assign_usb_device_address(uint32_t slot_id);
 
   // API for capability registers
@@ -358,6 +358,18 @@ class XHCIDriver : public USBControllerDriver {
     *getOpRegPtr(XHCIOpRegOff::CONFIG) = config;
   }
 
+  /*
+   * XHCI spec '7.2.2.1.1 Default USB Speed ID Mapping' mentions the following
+   * interpretation of the return value:
+   * - 1 : full-speed
+   * - 2 : low-speed (note the low-speed comes after full-speed..)
+   * - 3 : high-speed
+   * - 4 : super-speed
+   */
+  int getPortSpeed(uint32_t port_no) {
+    return (getPortSC(port_no) >> 10) & 0xF;
+  }
+
   // port_no starts from 1
   uint32_t getPortSC(uint32_t port_no) {
     return *(getOpRegPtr(XHCIOpRegOff::PORTSC) + 4 * (port_no - 1));
@@ -422,7 +434,7 @@ class XHCIDriver : public USBControllerDriver {
   }
 
  private:
-  void initEndpoint0Context(InputContext& input_context);
+  void initEndpoint0Context(InputContext& input_context, int max_packet_size);
   void initEndpointContext(InputContext& input_context, EndpointDescriptor& endpoint_descriptor);
   // send command to command ring and check the status in event ring
   void sendCommand(TRBTemplate req);
