@@ -316,7 +316,8 @@ void XHCIDriver::sendDeviceRequest(USBDevice<XHCIDriver>* device, DeviceRequest*
     off += len;
   }
 
-  auto status_trb = StatusStageTRB(!!(device_req->bmRequestType & 0x80));
+  // Refert to XHCI spec table 4-7 for how to define DIR bit of StatusStageTRB
+  auto status_trb = StatusStageTRB(!(device_req->bmRequestType & 0x80) || device_req->wLength == 0);
   auto* status_trb_addr = transfer_ring.enqueue(status_trb.toTemplate());
   ringDoorbell(device->slot_id(), 1 /* for control endpoint 0 */);
 
