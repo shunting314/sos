@@ -196,7 +196,7 @@ void XHCIDriver::initEndpointContext(InputContext& input_context, EndpointDescri
   ep_context.max_burst_size = 0;  // TODO use the information in SuperSpeedEndpointCompanionDescriptor to initialize it?
   ep_context.set_tr_dequeue_pointer(transfer_ring.get_addr());
   ep_context.dcs = 1;
-  ep_context.interval = 1;
+  ep_context.interval = 0;
   ep_context.max_pstreams = 0;
   ep_context.mult = 0;
   ep_context.cerr = 3;
@@ -213,6 +213,8 @@ void XHCIDriver::setup_slot(uint32_t slot_id, int port_no, int max_packet_size) 
     SlotContext& input_slot_context = input_context.device_context().slot_context();
     input_slot_context.root_hub_port_number = port_no;
     input_slot_context.route_string = 0;
+    // XHCI spec 4.5.2 mentions context_entries should be set to 1 for
+    // Address Device Command.
     input_slot_context.context_entries = 1;
   }
   initEndpoint0Context(input_context, max_packet_size);
@@ -253,6 +255,12 @@ static uint32_t add_context_flags_for_configure_endpoint(EndpointDescriptor& bul
 void XHCIDriver::configureEndpoints(USBDevice<XHCIDriver>* dev) {
   uint32_t slot_id = dev->slot_id();
   InputContext& input_context = globalInputContextList[slot_id];
+
+  SlotContext& input_slot_context = input_context.device_context().slot_context();
+
+  // follow Haiku OS
+  input_slot_context.context_entries = 31;
+
   initEndpointContext(input_context, dev->get_bulk_in_endpoint_desc());
   initEndpointContext(input_context, dev->get_bulk_out_endpoint_desc());
 
@@ -278,6 +286,9 @@ void XHCIDriver::initializeDevice(USBDevice<XHCIDriver> *dev) {
 
   // xhci spec: 4.3.5 device configuration
   dev->slot_id() = slot_id;
+
+  DeviceDescriptor device_desc = dev->getDeviceDescriptor();
+  printf("Device USB version 0x%x\n", device_desc.bcdUSB);
   ConfigurationDescriptor config_desc = dev->getConfigurationDescriptor();
 
   // set configuration

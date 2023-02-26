@@ -110,7 +110,7 @@ void setup_xhci() {
   #endif
 
   // write a block to MSD. Disable by default to avoid mutate the media
-  #if 0
+  #if 1
   uint8_t sendData[512];
   assert(sizeof(sendData) >= msd_dev.blockSize());
   for (int i = 0; i < msd_dev.blockSize(); ++i) {
@@ -118,6 +118,17 @@ void setup_xhci() {
   }
   msd_dev.writeBlocks(0, 1, sendData);
   printf("Done writing a block to MSD\n");
+
+  // read back
+  printf("Read data back:\n");
+  msd_dev.readBlocks(0, 1, sendData);
+  for (int i = 0; i < 32; ++i) {
+    putchar(sendData[i]);
+  }
+  putchar('\n');
+
+  // recover data
+  msd_dev.writeBlocks(0, 1, blockData);
   #endif
 }
 
