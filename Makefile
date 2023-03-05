@@ -44,6 +44,7 @@ run:
 # run with a fresh fs image
 crun clean-run:
 	rm -f fs.img
+	$(MAKE) clean
 	$(MAKE) run
 
 # specialize for c file under boot to add bootloader specific CFLAGS

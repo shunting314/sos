@@ -298,7 +298,9 @@ void kshell() {
   // We should reenable interrupt so kshell get keyboard inputs.
   asm("sti");
 
+#ifndef QUICK_TEST
   #define QUICK_TEST 1
+#endif
 #if QUICK_TEST
   // only execute the predefined command for the first time to avoid it being
   // executed in a dead loop. NOTE that handleLine may not return for some commands.

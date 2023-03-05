@@ -37,6 +37,9 @@ phys_addr_t clone_address_space(phys_addr_t parent_pgdir, bool use_cow);
 void map_region_alloc(phys_addr_t page_dir, uint32_t la_start, uint32_t size, int map_flags);
 void map_region(phys_addr_t page_dir, uint32_t la_start, uint32_t pa_start, uint32_t size, int map_flags);
 
+void dump_pgdir(phys_addr_t page_dir);
+void debug_paging_for_addr(uint32_t pgdir, uint32_t laddr);
+
 #define MAP_FLAG_WRITE (1UL << 0)
 #define MAP_FLAG_USER (1UL << 1)
 

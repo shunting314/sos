@@ -108,6 +108,9 @@ void setup_paging() {
   asm_set_cr3((uint32_t)kernel_page_dir);
   asm_cr0_enable_flags(CR0_PG | CR0_WP);
   printf("Paging enabled.\n");
+
+  // dump_pgdir((uint32_t) kernel_page_dir);
+  debug_paging_for_addr((uint32_t) kernel_page_dir, 0xb8000);
 }
 
 /*
@@ -209,4 +212,81 @@ phys_addr_t clone_address_space(phys_addr_t parent_pgdir, bool use_cow) {
   }
 
   return child_pgdir;
+}
+
+// end == 0 means wrap around.
+void dump_range(uint32_t start, uint32_t end, uint32_t flags) {
+  const char* flagsmap[] = {
+    "r", // kernel readable
+    "rw", // kernel writable
+    "ur", // user readable
+    "urw" // user writeable
+  };
+  printf("  0x%x - 0x%x %s\n", start, end, flagsmap[flags]); 
+}
+
+void dump_pgdir(phys_addr_t pgdir) {
+  printf("pgdir physaddr 0x%x\n", pgdir);
+
+  uint32_t start = 1; // a non page aligned value represents non exist
+  uint32_t end;
+  uint32_t flags;
+
+  paging_entry* pde_list = (paging_entry*) pgdir;
+  for (int i = 0; i < PAGING_ENTRIES_PER_PAGE; ++i) {
+    paging_entry* pde = &pde_list[i]; 
+    if (!pde->present) {
+      continue;
+    }
+    paging_entry* pte_list = (paging_entry*) (pde->phys_page_no << 12);
+    for (int j = 0; j < PAGING_ENTRIES_PER_PAGE; ++j) {
+      paging_entry* pte = &pte_list[j];
+      if (!pte->present) {
+        continue;
+      }
+
+      uint32_t pgaddr = MAKE_LADDR(i, j, 0);
+
+      // merge if we can
+      uint32_t pgflags = (pde->r_w & pte->r_w) | ((pde->u_s & pte->u_s) << 1);
+      if ((start & 0xfff) == 0 && end == pgaddr && flags == pgflags) {
+        end = pgaddr + PAGE_SIZE;
+        continue;
+      }
+
+      // print the previous segment if exist
+      if ((start & 0xfff) == 0) {
+        dump_range(start, end, flags);
+      }
+
+      start = pgaddr;
+      end = pgaddr + PAGE_SIZE;
+      flags = pgflags;
+    }
+  }
+
+  if ((start & 0xfff) == 0) {
+    dump_range(start, end, flags);
+  }
+}
+
+void debug_paging_for_addr(uint32_t pgdir, uint32_t laddr) {
+  laddr = (laddr & ~0xFFF);
+  uint32_t pdidx = PDIDX(laddr);
+  uint32_t ptidx = PTIDX(laddr);
+  paging_entry* pde_list = (paging_entry*) pgdir;
+  paging_entry* pde = &pde_list[pdidx];
+  printf("Bebug paging for laddr 0x%x\n", laddr);
+
+  if (!pde->present) {
+    printf("PDE not present\n");
+    return;
+  }
+  paging_entry* pte_list = (paging_entry*) (pde->phys_page_no << 12);
+  paging_entry* pte = &pte_list[ptidx];
+  if (!pte->present) {
+    printf("PTE not present\n");
+    return;
+  }
+  printf("Mapping exists\n");
 }
