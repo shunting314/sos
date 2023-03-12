@@ -109,7 +109,7 @@ void setup_paging() {
   asm_cr0_enable_flags(CR0_PG | CR0_WP);
   printf("Paging enabled.\n");
 
-  // dump_pgdir((uint32_t) kernel_page_dir);
+  dump_pgdir((uint32_t) kernel_page_dir);
   debug_paging_for_addr((uint32_t) kernel_page_dir, 0xb8000);
 }
 

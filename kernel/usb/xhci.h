@@ -193,13 +193,18 @@ class XHCIDriver : public USBControllerDriver {
     }
     assert((getUSBSts() & 0x1) == 0); // not halted
 
-    // resetting the root hub port will reset the attached device
-    for (int port_no = 1; port_no <= getMaxPort(); ++port_no) {
-      if (getPortSC(port_no) & 1) {
-        // reset the port only if there is a device attached
-        resetPort(port_no);
+    // loop until detected connection on some port.
+    int nreset = 0;
+    do {
+      // resetting the root hub port will reset the attached device
+      for (int port_no = 1; port_no <= getMaxPort(); ++port_no) {
+        if (getPortSC(port_no) & 1) {
+          // reset the port only if there is a device attached
+          resetPort(port_no);
+          ++nreset;
+        }
       }
-    }
+    } while (nreset == 0);
   }
 
   // this method assumes there is exactly 1 port with device attached and return its

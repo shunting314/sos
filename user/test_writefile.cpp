@@ -34,6 +34,6 @@ int main(void) {
   }
   assert(read(fd_read, buf3, sizeof(buf3)) == 0); // no more left
   close(fd_read);
-  printf("bye!\n");
+  printf("test_writefile bye!\n");
   return 0;
 }
