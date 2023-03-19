@@ -40,7 +40,15 @@ struct InterruptFrame {
   uint16_t ss_padding;
 
   void returnFromInterrupt() {
-    asm_return_from_interrupt(&edi);
+    // set to different value depending on if we are return to kernel mode
+    // or user mode.
+    uint16_t return_ds;
+    if (cs == KERNEL_CODE_SEG) {
+      return_ds = KERNEL_DATA_SEG;
+    } else {
+      return_ds = USER_DATA_SEG;
+    }
+    asm_return_from_interrupt(&edi, return_ds);
   }
 };
 

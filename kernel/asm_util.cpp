@@ -27,7 +27,12 @@ asm_get_cr2:
 asm(R"(
 .global asm_return_from_interrupt
 asm_return_from_interrupt:
+  mov 8(%esp), %ax
   mov 4(%esp), %esp
+  mov %ax, %ds
+  mov %ax, %es
+  mov %ax, %fs
+  mov %ax, %gs
   popa
   addl $4, %esp # skip the error code
   iret

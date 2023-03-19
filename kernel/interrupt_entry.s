@@ -5,6 +5,11 @@ interrupt_entry_ ## no: \
   pusha; \
   push %esp;  \
   push $no; \
+  mov $16, %ax; \
+  mov %ax, %ds; \
+  mov %ax, %es; \
+  mov %ax, %fs; \
+  mov %ax, %gs; \
   call interrupt_handler
 
 # push a dummy error code 0 to make the interrupt frame uniform
@@ -15,6 +20,11 @@ interrupt_entry_ ## no: \
   pusha; \
   push %esp;  \
   push $no; \
+  mov $16, %ax; \
+  mov %ax, %ds; \
+  mov %ax, %es; \
+  mov %ax, %fs; \
+  mov %ax, %gs; \
   call interrupt_handler
 
 DEF_INT_NOERR(0)
