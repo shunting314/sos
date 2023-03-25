@@ -132,7 +132,7 @@ endif
 
 # We put the filesystem in hdb rather than put it together with the kernel in hda
 # to make it easy to recreate kernel image while keeping the fs image.
-run: out/kernel.img fs.img
+run: build
 	# the options to setup monitor by telnet is copied from https://stackoverflow.com/questions/49716931/how-to-run-qemu-with-nographic-and-monitor-but-still-be-able-to-send-ctrlc-to
 	# Using -nographic option does not show content written to the vga memory.
 	# Use -curses works. Check https://stackoverflow.com/questions/6710555/how-to-use-qemu-to-run-a-non-gui-os-on-the-terminal for details.
@@ -140,13 +140,15 @@ run: out/kernel.img fs.img
 	#
 	# '-serial stdio' is added so the final content on the screen in the guest OS is available in the host terminal after terminating qemu.
 	#   One flaw: after adding this option, the first keyboard input is somehow lost.
+	$(QEMU) -display curses -monitor telnet::2000,server,nowait $(img_options) -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
+
+build: out/kernel.img fs.img
 ifeq ($(USB_BOOT), 1)
 	cp out/kernel.img out/usb.img
 	truncate -s `printf "%d\n" 0x100000` out/usb.img
 	# the file system starts at 1MB offset
 	cat fs.img >> out/usb.img
 endif
-	$(QEMU) -display curses -monitor telnet::2000,server,nowait $(img_options) -m 10 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
 
 # start a connection to qemu monitor
 mon:
