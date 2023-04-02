@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // an indirection is needed so __LINE__ is evaled before being concatenated.
 #define _CONCAT(a, b) a##b
 #define CONCAT(a, b) _CONCAT(a, b)
@@ -24,14 +28,21 @@
   enum { CONCAT(static_assert_enum_value__, __LINE__) = 1 / !!(cond), }
 #endif
 
+void backtrace();
+
 // TODO: check NDEBUG?
 // TODO: fall to dead loop in kernel model. We should just kill the process in user mode
 #define assert(cond) do { \
   if (!(cond)) { \
     printf("%s:%d: Assertion fail: %s\n", __FILE__, __LINE__, #cond); \
+    backtrace(); \
     while (1) { \
     } \
   } \
 } while (false)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -17,6 +17,22 @@
 char buf[65546] = {1};
 #endif
 
+#define TEST_BACKTRACE 1
+
+#if TEST_BACKTRACE
+void g() {
+  backtrace();
+}
+
+void f() {
+  g();
+}
+
+void test_backtrace() {
+  f();
+}
+#endif
+
 extern "C" void kernel_main() {
   vga_clear();
   kernel_elf_init();
@@ -41,5 +57,9 @@ extern "C" void kernel_main() {
 #endif
   usb_init();
   SimFs::get().init();
+
+#if TEST_BACKTRACE
+  test_backtrace();
+#endif
   kshell();
 }

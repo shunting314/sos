@@ -18,6 +18,8 @@ reset_cs:
   mov %ax, %fs
   mov %ax, %gs
   mov %ax, %ss
+
+  xor %ebp, %ebp # let backtrace stop here
   call kernel_main
 1:
   jmp 1b
