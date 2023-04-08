@@ -31,7 +31,7 @@ USB_BOOT := 1
 # -fno-builtin-printf is added so gcc does not try to use puts to optimize printf.
 # -Wno-pointer-arith allows arithmetic using void * assuming element size to be 1.
 #    This is only needed for C++. C compiler does not warn this by default.
-CFLAGS := -MD -I. -Icinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch -Wno-pointer-arith -DUSB_BOOT=$(USB_BOOT) $(EXTRA_CFLAGS)
+CFLAGS := -MD -I. -Icinc -fno-builtin-printf -Werror -Wno-builtin-declaration-mismatch -Wno-pointer-arith -g -DUSB_BOOT=$(USB_BOOT) $(EXTRA_CFLAGS)
 
 # extra CFLAGS for boot loader
 BOOT_CFLAGS := -Os
