@@ -7,3 +7,5 @@ doc/intel-developer-manual.pdf
 
 # ignore the file system image
 fs.img
+
+a.out
