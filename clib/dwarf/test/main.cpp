@@ -38,6 +38,31 @@ uint8_t read_uint8(const uint8_t*& cur, const uint8_t* end) {
   return *cur++;
 }
 
+uint16_t read_uint16(const uint8_t*& cur, const uint8_t* end) {
+  assert(cur + 1 < end);
+  uint16_t ret = *(uint16_t*) cur;
+  cur += 2;
+  return ret;
+}
+
+uint32_t read_uint32(const uint8_t*& cur, const uint8_t* end) {
+  assert(cur + 3 < end);
+  uint32_t ret = *(uint32_t*) cur;
+  cur += 4;
+  return ret;
+}
+
+const char* read_str(const uint8_t*& cur, const uint8_t* end) {
+  assert(cur < end);
+  const char* ret = (const char*) cur;
+  while (cur < end && *cur) {
+    ++cur;
+  }
+  assert(cur < end && *cur == 0);
+  ++cur;
+  return ret;
+}
+
 void hexdump(const uint8_t *data, int len) {
   for (int i = 0; i < len; ++i) {
     printf(" %02x", data[i]);
@@ -58,7 +83,7 @@ void hexdump(const uint8_t *data, int len) {
   _(byte_size, 0x0b) \
   _(stmt_list, 0x10) \
   _(low_pc, 0x11) \
-  _(high_pc, 0x12) \
+  _(high_pc, 0x12 /* it actually encodes the number of bytes */) \
   _(language, 0x13) \
   _(comp_dir, 0x1b) \
   _(producer, 0x25) \
@@ -155,17 +180,32 @@ class AbbrevEntry {
     attr_form_pairs_.emplace_back(attr, form);
   }
 
+  uint32_t tag() const { return tag_; };
+
   void dump() const {
     printf("code %d, tag %s, has_child %d, #pairs %lu\n", code_, dwtag2str(tag_), has_child_, attr_form_pairs_.size());
     for (auto& kv : attr_form_pairs_) {
       printf("  attr %s, form %s\n", dwat2str(kv.first), dwform2str(kv.second));
     }
   }
+
+  const vector<pair<uint32_t, uint32_t>>& get_attr_form_pairs() const {
+    return attr_form_pairs_;
+  }
  private:
   uint32_t code_;
   uint32_t tag_;
+  /*
+   * The next DIE is the first child if has_child_ is true, otherwise it's the
+   * next sibling. The sibling list ends with an entry with 0 code.
+   *
+   * The DIE list is a pre-order traversal of the DIE tree. Leveraging this flag,
+   * we can reconstruct the tree.
+   */
   bool has_child_;
   vector<pair<uint32_t, uint32_t>> attr_form_pairs_;
+
+  friend class AbbrevTable;
 };
 
 class AbbrevTable {
@@ -182,6 +222,8 @@ class AbbrevTable {
       if (abbrev_code == 0) {
         break;
       }
+      // make sure no duplicate
+      assert(find(abbrev_code) == NULL);
       uint32_t tag = read_ULEB128(cur, end);
       bool has_child = read_uint8(cur, end);
 
@@ -208,8 +250,44 @@ class AbbrevTable {
       entry.dump();
     }
   }
+
+  /*
+   * XXX use hash table.
+   */
+  const AbbrevEntry* find(uint32_t code) const {
+    for (const auto& entry : entries_) {
+      if (entry.code_ == code) {
+        return &entry;
+      }
+    }
+    return NULL;
+  }
  private:
   vector<AbbrevEntry> entries_;
+};
+
+struct FunctionEntry {
+  const char* name;
+  uint32_t start;
+  uint32_t len;
+};
+
+class DwarfContext {
+ public:
+  void parse_abbrev_table(const uint8_t* debug_abbrev_buf, int debug_abbrev_nbytes) {
+    abbrev_table_.parse(debug_abbrev_buf, debug_abbrev_nbytes);
+    abbrev_table_.dump();
+  }
+  void parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes);
+  void parse_elf(uint8_t* elfbuf, int filesiz);
+ private:
+  AbbrevTable abbrev_table_;
+  uint8_t* debug_str_buf_;
+  uint32_t debug_str_nbytes_;
+  uint8_t* debug_line_str_buf_;
+  uint32_t debug_line_str_nbytes_;
+
+  vector<FunctionEntry> function_entries_;
 };
 
 /* 
@@ -222,24 +300,139 @@ class AbbrevTable {
  * - 1 byte address size
  * - 4 byte debug abbrev offset (8 byte for 64 bit dwarf)
  */
-void parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes) {
+void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes) {
   printf(".debug_info content:\n");
   hexdump(debug_info_buf, debug_info_nbytes);
 
   uint32_t len = *(uint32_t*) debug_info_buf;  // little endian
   assert(len + 4 == debug_info_nbytes);
 
-  const uint8_t* cur = debug_info_buf + 4;
-  // hexdump(cur, len);
+  const uint8_t* cur = debug_info_buf + 4, *end = debug_info_buf + debug_info_nbytes;
+  uint16_t version = read_uint16(cur, end);
+  assert(version == 5 && "assume it's DWARF v5");
+  uint8_t unit_type = read_uint8(cur, end);
+  assert(unit_type == DW_UT_compile && "assum DW_UT_compile unit type");
+  uint8_t address_size = read_uint8(cur, end);
+  assert(address_size == 4);
+  uint32_t debug_abbrev_offset = read_uint32(cur, end);
+  assert(debug_abbrev_offset == 0);
+
+  while (cur < end) {
+    uint32_t abbrev_code = read_ULEB128(cur, end);
+    printf("Got abbrev_code %d\n", abbrev_code);
+    if (!abbrev_code) {
+      continue;
+    }
+    const AbbrevEntry* abbrev_entry = abbrev_table_.find(abbrev_code);
+    assert(abbrev_entry);
+    abbrev_entry->dump();
+
+    const char* fn_name = NULL;
+    uint32_t lowpc = -1, fn_nbytes = -1;
+
+    for (const auto& attr_form_pair : abbrev_entry->get_attr_form_pairs()) {
+      uint32_t attr = attr_form_pair.first;
+      uint32_t form = attr_form_pair.second;
+      switch (form) {
+      case DW_FORM_strp: {
+        uint32_t off = read_uint32(cur, end);
+        const char* str = (const char*) debug_str_buf_ + off;
+        printf("strp: '%s'\n", str);
+
+        if (attr == DW_AT_name) {
+          fn_name = str;
+        }
+        break;
+      }
+      case DW_FORM_line_strp: {
+        uint32_t off = read_uint32(cur, end);
+        printf("line_strp: '%s'\n", debug_line_str_buf_ + off);
+        break;
+      }
+      case DW_FORM_data1: {
+        uint8_t data = read_uint8(cur, end);
+        printf("data1: %u\n", data);
+        break;
+      }
+      case DW_FORM_data4: {
+        uint32_t data = read_uint32(cur, end);
+        printf("data4: %d (0x%x) \n", data, data);
+
+        if (attr == DW_AT_high_pc) {
+          fn_nbytes = data;
+        }
+        break;
+      }
+      case DW_FORM_addr: {
+        uint32_t addr = read_uint32(cur, end);
+        printf("addr: 0x%x\n", addr);
+
+        if (attr == DW_AT_low_pc) {
+          lowpc = addr;
+        }
+        break;
+      }
+      case DW_FORM_exprloc: {
+        uint32_t len = read_ULEB128(cur, end);
+        printf("exprloc: %d bytes\n", len);
+        cur += len;
+        assert(cur <= end);
+        break;
+      }
+      case DW_FORM_flag_present: {
+        // no data need to be encoded
+        printf("flag_present\n");
+        break;
+      }
+      case DW_FORM_ref4: {
+        uint32_t ref = read_uint32(cur, end);
+        printf("ref4: 0x%x\n", ref);
+        break;
+      }
+      case DW_FORM_sec_offset: {
+        uint32_t off = read_uint32(cur, end);
+        printf("sec_offset: 0x%x\n", off);
+        break;
+      }
+      case DW_FORM_string: {
+        const char* str = read_str(cur, end);
+        printf("string: '%s'\n", str);
+
+        if (attr == DW_AT_name) {
+          fn_name = str;
+        }
+        break;
+      }
+      default:
+        printf("Unrecognized form %s\n", dwform2str(form));
+        assert(false && "unrecognized form");
+      }
+    }
+  
+    // add the function entry
+    if (abbrev_entry->tag() == DW_TAG_subprogram) {
+      assert(fn_name);
+      assert(lowpc != -1);
+      assert(fn_nbytes != -1);
+      function_entries_.push_back({fn_name, lowpc, fn_nbytes});
+    }
+  }
+  assert(cur == end);
+
+  // dump the function entries
+  printf("Found %lu functions\n", function_entries_.size());
+  for (auto& entry : function_entries_) {
+    printf("- '%s', 0x%x, %d\n", entry.name, entry.start, entry.len);
+  }
 }
 
 void parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes) {
   printf(".debug_line content:\n");
   hexdump(debug_line_buf, debug_line_nbytes);
-  assert(false && "debug_line ni"); // TODO
+  assert(false && "parse_debug_line ni"); // TODO
 }
 
-void parse_elf(uint8_t* elfbuf, int filesiz) {
+void DwarfContext::parse_elf(uint8_t* elfbuf, int filesiz) {
   Elf32_Ehdr* elfhdr = (Elf32_Ehdr*) elfbuf;
   Elf32_Shdr* shdrtab = (Elf32_Shdr*) (elfbuf + elfhdr->e_shoff);
   char* shstrtab = (char*) (elfbuf + shdrtab[elfhdr->e_shstrndx].sh_offset);
@@ -249,6 +442,7 @@ void parse_elf(uint8_t* elfbuf, int filesiz) {
   Elf32_Shdr* debug_info_shdr = NULL;
   Elf32_Shdr* debug_str_shdr = NULL;
   Elf32_Shdr* debug_line_shdr = NULL;
+  Elf32_Shdr* debug_line_str_shdr = NULL;
 
   printf("#%d sections\n", nsec);
   for (int i = 0; i < nsec; ++i) {
@@ -263,6 +457,8 @@ void parse_elf(uint8_t* elfbuf, int filesiz) {
       debug_str_shdr = cursec;
     } else if (strcmp(secname, ".debug_line") == 0) {
       debug_line_shdr = cursec;
+    } else if (strcmp(secname, ".debug_line_str") == 0) {
+      debug_line_str_shdr = cursec;
     }
   }
   assert(debug_abbrev_shdr != NULL);
@@ -271,22 +467,23 @@ void parse_elf(uint8_t* elfbuf, int filesiz) {
 
   uint8_t* debug_abbrev_buf = elfbuf + debug_abbrev_shdr->sh_offset;
   int debug_abbrev_nbytes = debug_abbrev_shdr->sh_size;
-  AbbrevTable abbrev_table;
-  abbrev_table.parse(debug_abbrev_buf, debug_abbrev_nbytes);
-  abbrev_table.dump();
+  parse_abbrev_table(debug_abbrev_buf, debug_abbrev_nbytes);
 
-  uint8_t* debug_str_buf = elfbuf + debug_str_shdr->sh_offset;
-  int debug_str_nbytes = debug_str_shdr->sh_size;
+  debug_str_buf_ = elfbuf + debug_str_shdr->sh_offset;
+  debug_str_nbytes_ = debug_str_shdr->sh_size;
   printf(".debug_str content:\n");
-  hexdump(debug_str_buf, debug_str_nbytes);
+  hexdump(debug_str_buf_, debug_str_nbytes_);
 
-  uint8_t* debug_line_buf = elfbuf + debug_line_shdr->sh_offset;
-  int debug_line_nbytes = debug_line_shdr->sh_size;
-  parse_debug_line(debug_line_buf, debug_line_nbytes);
+  debug_line_str_buf_ = elfbuf + debug_line_str_shdr->sh_offset;
+  debug_line_str_nbytes_ = debug_line_str_shdr->sh_size;
 
   uint8_t* debug_info_buf = elfbuf + debug_info_shdr->sh_offset;
   int debug_info_nbytes = debug_info_shdr->sh_size;
   parse_debug_info(debug_info_buf, debug_info_nbytes);
+
+  uint8_t* debug_line_buf = elfbuf + debug_line_shdr->sh_offset;
+  int debug_line_nbytes = debug_line_shdr->sh_size;
+  parse_debug_line(debug_line_buf, debug_line_nbytes);
 }
 
 int main(int argc, char** argv) {
@@ -316,7 +513,8 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  parse_elf(buf, filesiz);
+  DwarfContext ctx;
+  ctx.parse_elf(buf, filesiz);
 
   free(buf);
   printf("Bye\n");
