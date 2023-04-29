@@ -110,6 +110,17 @@ void hexdump(const uint8_t *data, int len) {
   _(flag_present, 0x19) \
   _(line_strp, 0x1f)
 
+// standard line number program opcode
+#define FOR_EACH_DW_LNS(_) \
+  _(advance_pc, 2) \
+  _(set_column, 5) \
+  _(const_add_pc, 8)
+
+// extended line number program opcode
+#define FOR_EACH_DW_LNE(_) \
+  _(end_sequence, 1) \
+  _(set_address, 2)
+
 enum EnumDW_TAG {
 #define ENUM(name, val) DW_TAG_ ## name = val,
 FOR_EACH_DW_TAG(ENUM)
@@ -159,6 +170,42 @@ const char* dwform2str(uint32_t form) {
   #undef CASE
   default:
     printf("Unrecognized form 0x%x\n", form);
+    assert(false);
+    return NULL;
+  }
+}
+
+enum EnumDW_LNS {
+#define ENUM(name, val) DW_LNS_ ## name = val,
+FOR_EACH_DW_LNS(ENUM)
+#undef ENUM
+};
+
+const char* dwlns2str(uint32_t opcode) {
+  switch (opcode) {
+  #define CASE(name, _) case DW_LNS_ ## name: return "DW_LNS_" # name;
+    FOR_EACH_DW_LNS(CASE)
+  #undef CASE
+  default:
+    printf("Unrecognized standard opcode 0x%x\n", opcode);
+    assert(false);
+    return NULL;
+  }
+}
+
+enum EnumDW_LNE {
+#define ENUM(name, val) DW_LNE_ ## name = val,
+FOR_EACH_DW_LNE(ENUM)
+#undef ENUM
+};
+
+const char* dwlne2str(uint32_t opcode) {
+  switch (opcode) {
+  #define CASE(name, _) case DW_LNE_ ## name: return "DW_LNE_" # name;
+    FOR_EACH_DW_LNE(CASE)
+  #undef CASE
+  default:
+    printf("Unrecognized extended opcode 0x%x\n", opcode);
     assert(false);
     return NULL;
   }
@@ -279,8 +326,14 @@ class DwarfContext {
     abbrev_table_.dump();
   }
   void parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes);
+  void parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes);
   void parse_elf(uint8_t* elfbuf, int filesiz);
  private:
+  void add_lntab_entry(uint32_t addr, uint32_t ln) {
+    printf("addr 0x%x -> line number %d\n", addr, ln); // TODO
+    lntab_.emplace_back(addr, ln);
+  }
+
   AbbrevTable abbrev_table_;
   uint8_t* debug_str_buf_;
   uint32_t debug_str_nbytes_;
@@ -288,6 +341,7 @@ class DwarfContext {
   uint32_t debug_line_str_nbytes_;
 
   vector<FunctionEntry> function_entries_;
+  vector<pair<uint32_t, uint32_t>> lntab_;
 };
 
 /* 
@@ -426,10 +480,111 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
   }
 }
 
-void parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes) {
+/*
+ * Refer to DWARF5 spec section 6.2.4. for how to parse the header.
+ */
+void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes) {
   printf(".debug_line content:\n");
   hexdump(debug_line_buf, debug_line_nbytes);
-  assert(false && "parse_debug_line ni"); // TODO
+  uint32_t len = *(uint32_t*) debug_line_buf;
+  assert(len + 4 == debug_line_nbytes);
+
+  const uint8_t* cur = debug_line_buf + 4, *end = debug_line_buf + debug_line_nbytes;
+  // this is the version of the line number program.
+  // It is independent to the DWARF spec's version
+  uint16_t version = read_uint16(cur, end);
+  uint8_t address_size = read_uint8(cur, end);
+  assert(address_size == 4);
+  uint8_t segment_selector_size = read_uint8(cur, end);
+  // TODO use this to do an assertion
+  uint32_t header_length = read_uint32(cur, end);
+  // the size in bytes of the smallest target machine instruction.
+  uint8_t minimum_instruction_length = read_uint8(cur, end);
+  assert(minimum_instruction_length == 1);
+  // used to support VLIW
+  uint8_t maximum_operations_per_instruction = read_uint8(cur, end);
+  assert(maximum_operations_per_instruction == 1);
+  uint8_t default_is_stmt = read_uint8(cur, end);
+  int8_t line_base = (int8_t) read_uint8(cur, end);
+  uint8_t line_range = read_uint8(cur, end);
+  // the number assigned to the first special opcode.
+  uint8_t opcode_base = read_uint8(cur, end);
+
+  // skip standard opcode lengths
+  for (int i = 1; i <= opcode_base - 1; ++i) {
+    read_uint8(cur, end);
+  }
+
+  uint8_t directory_entry_format_count = read_uint8(cur, end);
+  for (int i = 0; i < directory_entry_format_count; ++i) {
+    read_ULEB128(cur, end);
+    read_ULEB128(cur, end);
+  }
+  uint32_t directories_count = read_ULEB128(cur, end);
+  printf("directories_count %d\n", directories_count);
+  for (int i = 0; i < directories_count; ++i) {
+    read_uint32(cur, end);
+  }
+  uint8_t file_name_entry_format_count = read_uint8(cur, end);
+  for (int i = 0; i < file_name_entry_format_count; ++i) {
+    read_ULEB128(cur, end);
+    read_ULEB128(cur, end);
+  }
+
+  uint32_t file_names_count = read_ULEB128(cur, end);
+  for (int i = 0; i < file_names_count; ++i) {
+    read_uint32(cur, end); // name
+    read_ULEB128(cur, end); // directory. Should be uint8?
+  }
+
+  // For simplicities, I assume each instruction only contains one operation.
+  // This is true for x86 (and most likely also be true for arm. but I need confirm)
+  uint8_t cur_line = 1, cur_addr = 0;
+  add_lntab_entry(cur_addr, cur_line);
+  while (cur < end) {
+    uint8_t byte0 = read_uint8(cur, end);
+    if (byte0 == 0) {
+      uint32_t extlen = read_ULEB128(cur, end);
+      uint32_t opcode = read_ULEB128(cur, end);
+      switch (opcode) {
+      case DW_LNE_end_sequence:
+        break;
+      case DW_LNE_set_address:
+        cur_addr = read_uint32(cur, end);
+        add_lntab_entry(cur_addr, cur_line);
+        break;
+      default:
+        printf("Got unsupported extended opcode %d (%s)\n", opcode, dwlne2str(opcode));
+        assert(false);
+      }
+    } else if (byte0 < opcode_base) {
+      switch (byte0) {
+      case DW_LNS_advance_pc:
+        cur_addr += read_ULEB128(cur, end);
+        add_lntab_entry(cur_addr, cur_line);
+        break;
+      case DW_LNS_set_column:
+        read_ULEB128(cur, end); // ignore column for now
+        break;
+      case DW_LNS_const_add_pc:
+        // add pc according to a const opcode of 255
+        cur_addr += (255 - opcode_base) / line_range;
+        add_lntab_entry(cur_addr, cur_line);
+        break;
+      default:
+        printf("Got unsupported standard opcode %d (%s)\n", byte0, dwlns2str(byte0));
+        assert(false);
+      }
+    } else {
+      assert(byte0 >= opcode_base);
+      byte0 -= opcode_base;
+      cur_line += byte0 % line_range + line_base;
+      cur_addr += byte0 / line_range;
+      add_lntab_entry(cur_addr, cur_line);
+    }
+  }
+
+  assert(cur == end);
 }
 
 void DwarfContext::parse_elf(uint8_t* elfbuf, int filesiz) {
