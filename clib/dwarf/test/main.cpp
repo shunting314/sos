@@ -33,6 +33,18 @@ uint32_t read_ULEB128(const uint8_t*& cur, const uint8_t* end) {
   return val;
 }
 
+int32_t read_SLEB128(const uint8_t*& cur, const uint8_t* end) {
+  const uint8_t* oldcur = cur;
+  uint32_t uval = read_ULEB128(cur, end);
+  int nbyte = cur - oldcur;
+  int nbit = nbyte * 7;
+  assert(nbit <= 31);
+  if (uval & (1 << (nbit - 1))) {
+    uval |= -(1 << nbit);
+  }
+  return (int32_t) uval;
+}
+
 uint8_t read_uint8(const uint8_t*& cur, const uint8_t* end) {
   assert(cur < end);
   return *cur++;
@@ -74,32 +86,78 @@ void hexdump(const uint8_t *data, int len) {
 }
 
 #define FOR_EACH_DW_TAG(_) \
+  _(array_type, 0x01) \
+  _(class_type, 0x02) \
+  _(enumeration_type, 0x04) \
+  _(formal_parameter, 0x05) \
+  _(label, 0x0a) \
+  _(lexical_block, 0x0b) \
+  _(member, 0x0d) \
+  _(pointer_type, 0x0f) \
+  _(reference_type, 0x10) \
   _(compile_unit, 0x11) \
+  _(structure_type, 0x13) \
+  _(subroutine_type, 0x15) \
+  _(typedef, 0x16) \
+  _(union_type, 0x17) \
+  _(unspecified_parameters, 0x18) \
+  _(inheritance, 0x1c) \
+  _(subrange_type, 0x21) \
   _(base_type, 0x24) \
-  _(subprogram, 0x2e)
+  _(const_type, 0x26) \
+  _(enumerator, 0x28) \
+  _(subprogram, 0x2e) \
+  _(template_type_parameter, 0x2f) \
+  _(variable, 0x34) \
+  _(volatile_type, 0x35) \
+  _(namespace, 0x39) \
+  _(rvalue_reference_type, 0x42) 
 
 #define FOR_EACH_DW_AT(_) \
+  _(sibling, 0x01) \
+  _(location, 0x02) \
   _(name, 0x03) \
   _(byte_size, 0x0b) \
+  _(bit_size, 0x0d) \
   _(stmt_list, 0x10) \
   _(low_pc, 0x11) \
   _(high_pc, 0x12 /* it actually encodes the number of bytes */) \
   _(language, 0x13) \
   _(comp_dir, 0x1b) \
+  _(const_value, 0x1c) \
+  _(inline, 0x20) \
   _(producer, 0x25) \
   _(prototyped, 0x27) \
+  _(upper_bound, 0x2f) \
+  _(abstract_origin, 0x31) \
+  _(accessibility, 0x32) \
+  _(artificial, 0x34) \
+  _(data_member_location, 0x38) \
   _(decl_column, 0x39) \
   _(decl_file, 0x3a) \
   _(decl_line, 0x3b) \
+  _(declaration, 0x3c) \
   _(encoding, 0x3e) \
   _(external, 0x3f) \
   _(frame_base, 0x40) \
+  _(specification, 0x47) \
   _(type, 0x49) \
+  _(ranges, 0x55) \
+  _(explicit, 0x63) \
+  _(object_pointer, 0x64) \
+  _(data_bit_offset, 0x6b) \
+  _(const_expr, 0x6c) \
+  _(enum_class, 0x6d) \
+  _(linkage_name, 0x6e) \
   _(call_all_calls, 0x7a) \
-  _(call_all_tail_calls, 0x7c)
+  _(call_all_tail_calls, 0x7c) \
+  _(alignment, 0x88) \
+  _(deleted, 0x8a) \
+  _(defaulted, 0x8b)
 
 #define FOR_EACH_DW_FORM(_) \
   _(addr, 0x01) \
+  _(data2, 0x05) \
   _(data4, 0x06) \
   _(string, 0x08) \
   _(data1, 0x0b) \
@@ -108,6 +166,7 @@ void hexdump(const uint8_t *data, int len) {
   _(sec_offset, 0x17) \
   _(exprloc, 0x18) \
   _(flag_present, 0x19) \
+  _(implicit_const, 0x21) \
   _(line_strp, 0x1f)
 
 // standard line number program opcode
@@ -264,27 +323,43 @@ class AbbrevTable {
     hexdump(debug_abbrev_buf, debug_abbrev_nbytes);
   
     const uint8_t* cur = debug_abbrev_buf, *end = debug_abbrev_buf + debug_abbrev_nbytes;
+    tables_.emplace_back(make_pair(0, vector<AbbrevEntry>()));
+    vector<AbbrevEntry>* pentries = &(tables_.back().second);
     while (cur < end) {
       uint32_t abbrev_code = read_ULEB128(cur, end);
       if (abbrev_code == 0) {
-        break;
+        printf("Got a 0 abbrev_code. Next 0x%lx\n", cur - debug_abbrev_buf);
+        tables_.emplace_back(make_pair(cur - debug_abbrev_buf, vector<AbbrevEntry>()));
+        pentries = &(tables_.back().second);
+        continue;
       }
       // make sure no duplicate
-      assert(find(abbrev_code) == NULL);
+      assert(find(*pentries, abbrev_code) == NULL);
       uint32_t tag = read_ULEB128(cur, end);
       bool has_child = read_uint8(cur, end);
 
-      entries_.emplace_back(abbrev_code, tag, has_child);
+      pentries->emplace_back(abbrev_code, tag, has_child);
+      printf("Got abbrev code %d, tag %s, has_child %d\n", abbrev_code, dwtag2str(tag), has_child);
 
-      AbbrevEntry& entry = entries_.back();
+      AbbrevEntry& entry = pentries->back();
   
       while (1) {
         uint32_t attr = read_ULEB128(cur, end);
         uint32_t form = read_ULEB128(cur, end);
+        if (form == DW_FORM_implicit_const) {
+          // DW_FORM_implicit_const contains the const value in the abbrev table.
+          // TODO: don't ignore it!
+          printf("  implicit const: %d\n", read_SLEB128(cur, end));
+        }
         if (attr == 0) {
+          printf("  Got 0 attr\n");
+          if (form != 0) {
+            printf("Got an unexpected form %d\n", form);
+          }
           assert(form == 0);
           break;
         }
+        printf("  Got attr %s, form %s\n", dwat2str(attr), dwform2str(form));
         entry.add_pair(attr, form);
       }
     }
@@ -292,17 +367,19 @@ class AbbrevTable {
   }
 
   void dump() const {
-    printf("Got %lu abbrev entries:\n", entries_.size());
-    for (auto& entry : entries_) {
-      entry.dump();
+    for (const auto& off_tbl : tables_) {
+      printf("Got %lu abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
+      for (const auto& entry : off_tbl.second) {
+        entry.dump();
+      }
     }
   }
 
   /*
    * XXX use hash table.
    */
-  const AbbrevEntry* find(uint32_t code) const {
-    for (const auto& entry : entries_) {
+  const AbbrevEntry* find(const vector<AbbrevEntry>& entries, uint32_t code) const {
+    for (const auto& entry : entries) {
       if (entry.code_ == code) {
         return &entry;
       }
@@ -310,7 +387,8 @@ class AbbrevTable {
     return NULL;
   }
  private:
-  vector<AbbrevEntry> entries_;
+  // first member of pair is offset
+  vector<pair<int, vector<AbbrevEntry>>> tables_;
 };
 
 struct FunctionEntry {
@@ -377,7 +455,12 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
     if (!abbrev_code) {
       continue;
     }
+    #if 0
     const AbbrevEntry* abbrev_entry = abbrev_table_.find(abbrev_code);
+    #else
+    const AbbrevEntry* abbrev_entry = NULL;
+    assert(false && "parse_debug_info ni");
+    #endif
     assert(abbrev_entry);
     abbrev_entry->dump();
 
