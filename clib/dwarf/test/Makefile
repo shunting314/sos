@@ -1,5 +1,9 @@
-all:
-	g++ main.cpp -std=c++11
-	# i686-elf-gcc -g -c hello.c -o /tmp/hello.o
-	# ./a.out /tmp/hello.o
+all: build
 	./a.out ../../../out/kernel/kernel
+
+hello: build
+	i686-elf-gcc -g -c hello.c -o /tmp/hello.o
+	./a.out /tmp/hello.o
+
+build:
+	g++ main.cpp -std=c++11

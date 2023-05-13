@@ -173,12 +173,15 @@ void hexdump(const uint8_t *data, int len) {
 #define FOR_EACH_DW_LNS(_) \
   _(advance_pc, 2) \
   _(set_column, 5) \
+  _(negate_stmt, 6) \
   _(const_add_pc, 8)
 
 // extended line number program opcode
 #define FOR_EACH_DW_LNE(_) \
   _(end_sequence, 1) \
-  _(set_address, 2)
+  _(set_address, 2) \
+  _(set_discriminator, 4)
+
 
 enum EnumDW_TAG {
 #define ENUM(name, val) DW_TAG_ ## name = val,
@@ -386,6 +389,16 @@ class AbbrevTable {
     }
     return NULL;
   }
+
+  const vector<AbbrevEntry>* find_by_off(uint32_t off) const {
+    for (const auto& kv : tables_) {
+      if (kv.first == off) {
+        return &kv.second;
+      }
+    }
+    return NULL;
+  }
+
  private:
   // first member of pair is offset
   vector<pair<int, vector<AbbrevEntry>>> tables_;
@@ -404,8 +417,20 @@ class DwarfContext {
     abbrev_table_.dump();
   }
   void parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes);
+  void parse_debug_info_for_one_abbrev_off(const uint8_t* start, const uint8_t* cur, const uint8_t* end);
   void parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes);
+  // parse for one line number program
+  void parse_debug_line_one_program(const uint8_t* start, const uint8_t* cur, const uint8_t* end);
   void parse_elf(uint8_t* elfbuf, int filesiz);
+
+  const FunctionEntry* find_func_entry_by_addr(uint32_t addr) {
+    for (const auto& entry : function_entries_) {
+      if (addr >= entry.start && addr < entry.start + entry.len) {
+        return &entry;
+      }
+    }
+    return NULL;
+  }
  private:
   void add_lntab_entry(uint32_t addr, uint32_t ln) {
     printf("addr 0x%x -> line number %d\n", addr, ln); // TODO
@@ -422,24 +447,13 @@ class DwarfContext {
   vector<pair<uint32_t, uint32_t>> lntab_;
 };
 
-/* 
- * 32 bit dwarf format's unit headers start with the following common fields:
- * - 4 byte length field for the payload followed. 64 bit dwarf format uses 12 bytes.
- * - 2 byte version number.
- * - 1 byte for unit type.
+/*
+ * cur points after length field when this method is called.
  *
- * For a compilation unit header, the following fields follow:
- * - 1 byte address size
- * - 4 byte debug abbrev offset (8 byte for 64 bit dwarf)
+ * 'start' points to the start of the .debug_info section. Pass this in so we can
+ * print the relative offset from 'start' for debugging.
  */
-void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes) {
-  printf(".debug_info content:\n");
-  hexdump(debug_info_buf, debug_info_nbytes);
-
-  uint32_t len = *(uint32_t*) debug_info_buf;  // little endian
-  assert(len + 4 == debug_info_nbytes);
-
-  const uint8_t* cur = debug_info_buf + 4, *end = debug_info_buf + debug_info_nbytes;
+void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, const uint8_t* cur, const uint8_t* end) {
   uint16_t version = read_uint16(cur, end);
   assert(version == 5 && "assume it's DWARF v5");
   uint8_t unit_type = read_uint8(cur, end);
@@ -447,20 +461,18 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
   uint8_t address_size = read_uint8(cur, end);
   assert(address_size == 4);
   uint32_t debug_abbrev_offset = read_uint32(cur, end);
-  assert(debug_abbrev_offset == 0);
+
+  const vector<AbbrevEntry>* pentries = abbrev_table_.find_by_off(debug_abbrev_offset);
+  assert(pentries);
 
   while (cur < end) {
+    printf("Handle .debug_info offset 0x%lx\n", (cur - start));
     uint32_t abbrev_code = read_ULEB128(cur, end);
     printf("Got abbrev_code %d\n", abbrev_code);
     if (!abbrev_code) {
       continue;
     }
-    #if 0
-    const AbbrevEntry* abbrev_entry = abbrev_table_.find(abbrev_code);
-    #else
-    const AbbrevEntry* abbrev_entry = NULL;
-    assert(false && "parse_debug_info ni");
-    #endif
+    const AbbrevEntry* abbrev_entry = abbrev_table_.find(*pentries, abbrev_code);
     assert(abbrev_entry);
     abbrev_entry->dump();
 
@@ -470,6 +482,8 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
     for (const auto& attr_form_pair : abbrev_entry->get_attr_form_pairs()) {
       uint32_t attr = attr_form_pair.first;
       uint32_t form = attr_form_pair.second;
+
+      // TODO decouple the association of an attribute with a specific form
       switch (form) {
       case DW_FORM_strp: {
         uint32_t off = read_uint32(cur, end);
@@ -489,6 +503,11 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
       case DW_FORM_data1: {
         uint8_t data = read_uint8(cur, end);
         printf("data1: %u\n", data);
+        break;
+      }
+      case DW_FORM_data2: {
+        uint16_t data = read_uint16(cur, end);
+        printf("data2: %u\n", data);
         break;
       }
       case DW_FORM_data4: {
@@ -521,6 +540,10 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
         printf("flag_present\n");
         break;
       }
+      case DW_FORM_implicit_const: {
+        printf("implicit_const: TODO store the implicit const data with the abbrev entry\n");
+        break;
+      }
       case DW_FORM_ref4: {
         uint32_t ref = read_uint32(cur, end);
         printf("ref4: 0x%x\n", ref);
@@ -547,12 +570,37 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
     }
   
     // add the function entry
-    if (abbrev_entry->tag() == DW_TAG_subprogram) {
+    if (abbrev_entry->tag() == DW_TAG_subprogram && fn_name && (lowpc != -1 || fn_nbytes != -1)) {
       assert(fn_name);
       assert(lowpc != -1);
       assert(fn_nbytes != -1);
       function_entries_.push_back({fn_name, lowpc, fn_nbytes});
     }
+  }
+  assert(cur == end);
+}
+
+/* 
+ * 32 bit dwarf format's unit headers start with the following common fields:
+ * - 4 byte length field for the payload followed. 64 bit dwarf format uses 12 bytes.
+ * - 2 byte version number.
+ * - 1 byte for unit type.
+ *
+ * For a compilation unit header, the following fields follow:
+ * - 1 byte address size
+ * - 4 byte debug abbrev offset (8 byte for 64 bit dwarf)
+ */
+void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes) {
+  printf(".debug_info content:\n");
+  hexdump(debug_info_buf, debug_info_nbytes);
+
+  const uint8_t* cur = debug_info_buf, *end = debug_info_buf + debug_info_nbytes;
+  while (cur < end) {
+    uint32_t len = read_uint32(cur, end);
+    assert(cur + len <= end);
+
+    parse_debug_info_for_one_abbrev_off(debug_info_buf, cur, cur + len);
+    cur = cur + len;
   }
   assert(cur == end);
 
@@ -564,15 +612,9 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
 }
 
 /*
- * Refer to DWARF5 spec section 6.2.4. for how to parse the header.
- */
-void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes) {
-  printf(".debug_line content:\n");
-  hexdump(debug_line_buf, debug_line_nbytes);
-  uint32_t len = *(uint32_t*) debug_line_buf;
-  assert(len + 4 == debug_line_nbytes);
-
-  const uint8_t* cur = debug_line_buf + 4, *end = debug_line_buf + debug_line_nbytes;
+ * cur points after length field when this method is called.
+  */
+void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint8_t* cur, const uint8_t* end) {
   // this is the version of the line number program.
   // It is independent to the DWARF spec's version
   uint16_t version = read_uint16(cur, end);
@@ -606,23 +648,29 @@ void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_lin
   uint32_t directories_count = read_ULEB128(cur, end);
   printf("directories_count %d\n", directories_count);
   for (int i = 0; i < directories_count; ++i) {
-    read_uint32(cur, end);
+    uint32_t off = read_uint32(cur, end);
+    printf("  dir %s\n", debug_line_str_buf_ + off);
   }
   uint8_t file_name_entry_format_count = read_uint8(cur, end);
+  printf("file name entry format count %d\n", file_name_entry_format_count);
   for (int i = 0; i < file_name_entry_format_count; ++i) {
     read_ULEB128(cur, end);
     read_ULEB128(cur, end);
   }
 
   uint32_t file_names_count = read_ULEB128(cur, end);
+  printf("file name count %d\n", file_names_count);
   for (int i = 0; i < file_names_count; ++i) {
-    read_uint32(cur, end); // name
+    uint32_t off = read_uint32(cur, end); // name
     read_ULEB128(cur, end); // directory. Should be uint8?
+    printf("  filename %s\n", debug_line_str_buf_ + off);
   }
 
+  printf("current off 0x%lx\n", cur - start); // TODO
   // For simplicities, I assume each instruction only contains one operation.
   // This is true for x86 (and most likely also be true for arm. but I need confirm)
-  uint8_t cur_line = 1, cur_addr = 0;
+  uint32_t cur_line = 1, cur_addr = 0;
+  uint32_t discriminator;
   add_lntab_entry(cur_addr, cur_line);
   while (cur < end) {
     uint8_t byte0 = read_uint8(cur, end);
@@ -636,6 +684,10 @@ void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_lin
         cur_addr = read_uint32(cur, end);
         add_lntab_entry(cur_addr, cur_line);
         break;
+      case DW_LNE_set_discriminator:
+        discriminator = read_ULEB128(cur, end); // ignore for now
+        printf("Ignore discriminator %d\n", discriminator);
+        break;
       default:
         printf("Got unsupported extended opcode %d (%s)\n", opcode, dwlne2str(opcode));
         assert(false);
@@ -646,6 +698,8 @@ void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_lin
         cur_addr += read_ULEB128(cur, end);
         add_lntab_entry(cur_addr, cur_line);
         break;
+      case DW_LNS_negate_stmt:
+        break; // ignore
       case DW_LNS_set_column:
         read_ULEB128(cur, end); // ignore column for now
         break;
@@ -666,7 +720,26 @@ void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_lin
       add_lntab_entry(cur_addr, cur_line);
     }
   }
+  assert(cur == end);
+}
 
+/*
+ * Refer to DWARF5 spec section 6.2.4. for how to parse the header.
+ */
+void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes) {
+  printf("parsing .debug_line:\n");
+  // hexdump(debug_line_buf, debug_line_nbytes);
+
+  const uint8_t* cur = debug_line_buf;
+  const uint8_t* end = debug_line_buf + debug_line_nbytes;
+
+  while (cur < end) {
+    uint32_t len = read_uint32(cur, end);
+    assert(cur + len <= end);
+
+    parse_debug_line_one_program(debug_line_buf, cur, cur + len);
+    cur = cur + len;
+  }
   assert(cur == end);
 }
 
@@ -718,6 +791,23 @@ void DwarfContext::parse_elf(uint8_t* elfbuf, int filesiz) {
   uint8_t* debug_info_buf = elfbuf + debug_info_shdr->sh_offset;
   int debug_info_nbytes = debug_info_shdr->sh_size;
   parse_debug_info(debug_info_buf, debug_info_nbytes);
+
+  #if 1
+  // testing for the addresses printed in sos kernel backtrace
+  uint32_t addrlist[] = {
+    0x10b1d7,
+    0x101d3e,
+    0x101d4c,
+    0x101d5a,
+    0x101dc0,
+    0,
+  };
+  for (int i = 0; addrlist[i]; ++i) {
+    uint32_t addr = addrlist[i];
+    const FunctionEntry* entry = find_func_entry_by_addr(addr);
+    printf("addr -> %s\n", entry ? entry->name : "<unknown>");
+  }
+  #endif
 
   uint8_t* debug_line_buf = elfbuf + debug_line_shdr->sh_offset;
   int debug_line_nbytes = debug_line_shdr->sh_size;
