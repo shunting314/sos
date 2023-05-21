@@ -5,11 +5,13 @@
 #include <stdint.h>
 #include <string.h>
 #include <vector>
+#include <algorithm>
 #include "../../../cinc/elf.h"
 
 // TODO may replace these with sos's implementation
 #define vector std::vector
 #define pair std::pair
+#define sort std::sort
 
 /*
  * cur will be updated by this function.
@@ -171,7 +173,10 @@ void hexdump(const uint8_t *data, int len) {
 
 // standard line number program opcode
 #define FOR_EACH_DW_LNS(_) \
+  _(copy, 1) \
   _(advance_pc, 2) \
+  _(advance_line, 3) \
+  _(set_file, 4) \
   _(set_column, 5) \
   _(negate_stmt, 6) \
   _(const_add_pc, 8)
@@ -410,6 +415,26 @@ struct FunctionEntry {
   uint32_t len;
 };
 
+struct LineNoEntry {
+ public:
+  LineNoEntry(uint32_t _addr, const char* _file_name, uint32_t _lineno)
+    : addr(_addr), file_name(_file_name), lineno(_lineno) {
+  }
+
+  void dump() const {
+    printf("  0x%x -> %s:%d\n", addr, file_name, lineno);
+  }
+
+  uint32_t addr;
+  const char* file_name;
+  uint32_t lineno;
+
+  bool operator<(const LineNoEntry& rhs) const {
+    const auto& lhs = *this;
+    return lhs.addr < rhs.addr;
+  }
+};
+
 class DwarfContext {
  public:
   void parse_abbrev_table(const uint8_t* debug_abbrev_buf, int debug_abbrev_nbytes) {
@@ -431,10 +456,80 @@ class DwarfContext {
     }
     return NULL;
   }
+
+  /*
+   * Binary search to find the last entry with entry.addr <= addr
+   */
+  const LineNoEntry* find_lineno_entry_by_addr(uint32_t addr) {
+    int s = 0, e = lntab_.size() - 1, m;
+    while (s <= e) {
+      m = s + (e - s) / 2;
+      if (lntab_[m].addr <= addr) {
+        s = m + 1;
+      } else {
+        e = m - 1;
+      }
+    }
+    if (e >= 0 && e < lntab_.size()) {
+      return &lntab_[e];
+    } else {
+      return nullptr;
+    }
+  }
  private:
-  void add_lntab_entry(uint32_t addr, uint32_t ln) {
-    printf("addr 0x%x -> line number %d\n", addr, ln); // TODO
-    lntab_.emplace_back(addr, ln);
+  /*
+   * If the previous entry has the same addr, overwrite it with the new entry.
+   */
+  void add_lntab_entry(uint32_t addr, const char* file_name, uint32_t ln) {
+    if (addr == 0) {
+      // ignore addr == 0 for now
+      return;
+    }
+    if (lntab_.size() > 0 && lntab_.back().addr == addr) {
+      lntab_.back().file_name = file_name;
+      lntab_.back().lineno = ln;
+    } else {
+      lntab_.emplace_back(addr, file_name, ln);
+    }
+  }
+
+  /*
+   * Sort is necessary. Check line number program snippet as follows:
+     [0x000004d5]  Advance PC by 2 to 0x114b5b
+     [0x000004d7]  Extended opcode 1: End of Sequence
+
+     [0x000004da]  Set File Name to entry 2 in the File Name Table
+     [0x000004dc]  Set column to 51
+     [0x000004de]  Extended opcode 2: set Address to 0x100816
+     [0x000004e5]  Advance Line by 21 to 22
+   * 
+   * After setting addr to 0x114b5b, the addr will be changed to
+   * 0x100816 next.
+   */
+  void postprocess_lntab() {
+    sort(lntab_.begin(), lntab_.end());
+
+    for (int i = 0; i + 1 < lntab_.size(); ++i) {
+      const auto& lhs = lntab_[i];
+      const auto& rhs = lntab_[i + 1];
+
+      // dump for entries with equal addresses
+      if (lhs.addr >= rhs.addr) {
+        lhs.dump();
+        rhs.dump();
+      }
+
+      // there are entries with equal addresses. We should have
+      // a better way to dedup them.
+      assert(lhs.addr <= rhs.addr);
+    }
+  }
+
+  void dump_lntab() {
+    printf("The lntab contains %lu entries\n", lntab_.size());
+    for (auto& ent : lntab_) {
+      ent.dump();
+    }
   }
 
   AbbrevTable abbrev_table_;
@@ -444,7 +539,7 @@ class DwarfContext {
   uint32_t debug_line_str_nbytes_;
 
   vector<FunctionEntry> function_entries_;
-  vector<pair<uint32_t, uint32_t>> lntab_;
+  vector<LineNoEntry> lntab_;
 };
 
 /*
@@ -659,19 +754,23 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
   }
 
   uint32_t file_names_count = read_ULEB128(cur, end);
+  vector<const char*> file_names;
   printf("file name count %d\n", file_names_count);
   for (int i = 0; i < file_names_count; ++i) {
     uint32_t off = read_uint32(cur, end); // name
     read_ULEB128(cur, end); // directory. Should be uint8?
     printf("  filename %s\n", debug_line_str_buf_ + off);
+    file_names.push_back((const char*) debug_line_str_buf_ + off);
   }
 
   printf("current off 0x%lx\n", cur - start); // TODO
   // For simplicities, I assume each instruction only contains one operation.
   // This is true for x86 (and most likely also be true for arm. but I need confirm)
   uint32_t cur_line = 1, cur_addr = 0;
+  uint32_t cur_file_idx = 0;
+  const char* cur_file_name = file_names[0];
   uint32_t discriminator;
-  add_lntab_entry(cur_addr, cur_line);
+  // add_lntab_entry(cur_addr, cur_line); // don't add the initial state
   while (cur < end) {
     uint8_t byte0 = read_uint8(cur, end);
     if (byte0 == 0) {
@@ -682,7 +781,7 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
         break;
       case DW_LNE_set_address:
         cur_addr = read_uint32(cur, end);
-        add_lntab_entry(cur_addr, cur_line);
+        add_lntab_entry(cur_addr, cur_file_name, cur_line);
         break;
       case DW_LNE_set_discriminator:
         discriminator = read_ULEB128(cur, end); // ignore for now
@@ -694,9 +793,21 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
       }
     } else if (byte0 < opcode_base) {
       switch (byte0) {
+      case DW_LNS_copy:
+        // nop for now
+        break;
       case DW_LNS_advance_pc:
         cur_addr += read_ULEB128(cur, end);
-        add_lntab_entry(cur_addr, cur_line);
+        add_lntab_entry(cur_addr, cur_file_name, cur_line);
+        break;
+      case DW_LNS_advance_line:
+        cur_line += read_SLEB128(cur, end);
+        add_lntab_entry(cur_addr, cur_file_name, cur_line);
+        break;
+      case DW_LNS_set_file:
+        cur_file_idx = read_ULEB128(cur, end);
+        printf("Set file idx to %d\n", cur_file_idx);
+        cur_file_name = file_names[cur_file_idx];
         break;
       case DW_LNS_negate_stmt:
         break; // ignore
@@ -706,7 +817,7 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
       case DW_LNS_const_add_pc:
         // add pc according to a const opcode of 255
         cur_addr += (255 - opcode_base) / line_range;
-        add_lntab_entry(cur_addr, cur_line);
+        add_lntab_entry(cur_addr, cur_file_name, cur_line);
         break;
       default:
         printf("Got unsupported standard opcode %d (%s)\n", byte0, dwlns2str(byte0));
@@ -717,7 +828,7 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
       byte0 -= opcode_base;
       cur_line += byte0 % line_range + line_base;
       cur_addr += byte0 / line_range;
-      add_lntab_entry(cur_addr, cur_line);
+      add_lntab_entry(cur_addr, cur_file_name, cur_line);
     }
   }
   assert(cur == end);
@@ -741,6 +852,9 @@ void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_lin
     cur = cur + len;
   }
   assert(cur == end);
+
+  postprocess_lntab();
+  dump_lntab();
 }
 
 void DwarfContext::parse_elf(uint8_t* elfbuf, int filesiz) {
@@ -792,6 +906,10 @@ void DwarfContext::parse_elf(uint8_t* elfbuf, int filesiz) {
   int debug_info_nbytes = debug_info_shdr->sh_size;
   parse_debug_info(debug_info_buf, debug_info_nbytes);
 
+  uint8_t* debug_line_buf = elfbuf + debug_line_shdr->sh_offset;
+  int debug_line_nbytes = debug_line_shdr->sh_size;
+  parse_debug_line(debug_line_buf, debug_line_nbytes);
+
   #if 1
   // testing for the addresses printed in sos kernel backtrace
   uint32_t addrlist[] = {
@@ -805,13 +923,11 @@ void DwarfContext::parse_elf(uint8_t* elfbuf, int filesiz) {
   for (int i = 0; addrlist[i]; ++i) {
     uint32_t addr = addrlist[i];
     const FunctionEntry* entry = find_func_entry_by_addr(addr);
-    printf("addr -> %s\n", entry ? entry->name : "<unknown>");
+    const LineNoEntry* lnentry = find_lineno_entry_by_addr(addr);
+    assert(lnentry);
+    printf("addr -> %s, %s:%d\n", entry ? entry->name : "<unknown>", lnentry->file_name, lnentry->lineno);
   }
   #endif
-
-  uint8_t* debug_line_buf = elfbuf + debug_line_shdr->sh_offset;
-  int debug_line_nbytes = debug_line_shdr->sh_size;
-  parse_debug_line(debug_line_buf, debug_line_nbytes);
 }
 
 int main(int argc, char** argv) {
