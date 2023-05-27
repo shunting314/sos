@@ -13,6 +13,8 @@
 #include <kernel/usb/usb.h>
 #include <stdio.h>
 
+void test_kernel();
+
 #ifdef TEST_LARGE_KERNEL
 char buf[65546] = {1};
 #endif
@@ -33,6 +35,12 @@ void test_backtrace() {
 }
 #endif
 
+void setup_malloc(void *start, uint32_t size); // this is defined in clib/malloc.cpp
+static void setup_kernel_malloc() {
+  // be consistent with setup_paging()
+  setup_malloc((void*) phys_mem_amount, 1 << 20); 
+}
+
 extern "C" void kernel_main() {
   vga_clear();
   kernel_elf_init();
@@ -43,6 +51,7 @@ extern "C" void kernel_main() {
 
   setup_phys_page_freelist();
   setup_paging();
+  setup_kernel_malloc();
   setup_tss();
 
   lspci();
@@ -58,6 +67,7 @@ extern "C" void kernel_main() {
   usb_init();
   SimFs::get().init();
 
+  test_kernel();
 #if TEST_BACKTRACE
   test_backtrace();
 #endif

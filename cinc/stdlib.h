@@ -73,4 +73,9 @@ static inline void hexdump(const uint8_t *data, int len) {
   printf("\n");
 }
 
+// memory management
+void* malloc(uint32_t nbytes);
+void* realloc(void* ptr, uint32_t sz);
+void free(void* ptr);
+
 #endif

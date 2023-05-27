@@ -54,6 +54,8 @@ gdt_desc:
 # not consume ELF file space by putting the stack in .bss section.
 # .data
 .bss
+
+# TODO: unmap the bottom page to guard against kernel stack overflow
 .align 4096
 kernel_stack_bottom:
   .space 65536 # 64K for now
