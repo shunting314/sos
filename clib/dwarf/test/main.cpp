@@ -1,3 +1,6 @@
+/*
+ * TODO: clean up this file by using cinc/dwarf.h and clib/dwarf.c[pp]
+ */
 #include <stdio.h>
 #include <sys/stat.h>
 #include <assert.h>

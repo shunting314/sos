@@ -41,6 +41,17 @@ void backtrace();
   } \
 } while (false)
 
+// safe_assert doesn't call backtrace(). So we can call it in dwarf related
+// code without worrying about infinite recursion.
+#define safe_assert(cond) do { \
+  if (!(cond)) { \
+    printf("%s:%d: Assertion fail: %s\n", __FILE__, __LINE__, #cond); \
+    while (1) { \
+    } \
+  } \
+} while (false)
+
+
 #ifdef __cplusplus
 }
 #endif

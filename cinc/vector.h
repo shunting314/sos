@@ -28,6 +28,17 @@ class vector {
     data_[size_++] = val;
   }
 
+  T& back() {
+    assert(size_ > 0);
+    return data_[size_ - 1];
+  }
+
+  T* begin() { return data_; }
+  const T* begin() const { return data_; }
+
+  T* end() { return data_ + size_; }
+  const T* end() const { return data_ + size_; }
+
   /*
    * To support destructor, we need implement the following symbols:
    * - /Users/shunting/Documents/sos/kernel/test_kernel.cpp:24: undefined reference to `_Unwind_Resume'
@@ -45,6 +56,7 @@ class vector {
       data_ = nullptr;
       capacity_ = 0;
       size_ = 0;
+      safe_assert(false && "call destructor for each element");
     }
   }
 

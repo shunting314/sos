@@ -7,6 +7,7 @@
 
 #include <assert.h>
 #include <vector.h>
+#include <algorithm.h>
 
 #define TEST_VECTOR 0
 #if TEST_VECTOR
@@ -41,7 +42,27 @@ void test_malloc() {
 void test_malloc() { }
 #endif
 
+#define TEST_SORT 1
+#if TEST_SORT
+void test_sort() {
+  vector<int> ar;
+  ar.push_back(0);
+  for (int i = 1; i <= 5; ++i) {
+    ar.push_back(i);
+    ar.push_back(-i);
+  }
+  sort(ar.begin(), ar.end());
+  assert(ar.size() == 11);
+  for (int i = 0; i < ar.size(); ++i) {
+    assert(ar[i] == i - 5);
+  }
+}
+#else
+void test_sort() { }
+#endif
+
 void test_kernel() {
   test_vector();
   test_malloc();
+  test_sort();
 }

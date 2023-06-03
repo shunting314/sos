@@ -76,6 +76,8 @@ void* malloc(uint32_t nbytes) {
     return nullptr;
   }
 
+  assert(free_block_head);
+
   nbytes = ROUND_UP(nbytes, MIN_ALIGN);
 
   FreeBlock* found = nullptr;
