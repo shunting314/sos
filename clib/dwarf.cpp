@@ -1,5 +1,11 @@
+#ifdef HOST_OS
+#include "../cinc/dwarf.h"
+#include "../cinc/elf.h"
+#else
 #include <dwarf.h>
 #include <elf.h>
+#endif
+
 #include <string.h>
 
 /*

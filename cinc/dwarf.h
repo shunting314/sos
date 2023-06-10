@@ -2,11 +2,31 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+
+#ifdef HOST_OS
+#include <vector>
+using std::pair;
+using std::vector;
+using std::make_pair;
+#define safe_assert assert
+static void hexdump(const uint8_t *data, int len) {
+  for (int i = 0; i < len; ++i) {
+    printf(" %02x", data[i]);
+    if ((i + 1) % 16 == 0) {
+      printf("\n");
+    }
+  }
+  printf("\n");
+}
+#else
 #include <vector.h>
 #include <algorithm.h>
 #include <pair.h>
+#endif
 
+#ifndef DEBUG
 #define DEBUG false
+#endif
 
 #define dprintf(...) \
   if (DEBUG) { \
@@ -175,7 +195,7 @@ class AbbrevEntry {
 
   void add_pair(uint32_t attr, uint32_t form) {
     // TODO implement emplace_back
-    #if 0
+    #ifdef HOST_OS
     attr_form_pairs_.emplace_back(attr, form);
     #else
     attr_form_pairs_.push_back(make_pair(attr, form));
@@ -186,7 +206,7 @@ class AbbrevEntry {
 
   void dump() const {
     // TODO %lu not supported yet
-    #if 0
+    #ifdef HOST_OS
     printf("code %d, tag %s, has_child %d, #pairs %lu\n", code_, dwtag2str(tag_), has_child_, attr_form_pairs_.size());
     #else
     printf("code %d, tag %s, has_child %d, #pairs %d\n", code_, dwtag2str(tag_), has_child_, attr_form_pairs_.size());
@@ -240,7 +260,7 @@ class AbbrevTable {
       bool has_child = read_uint8(cur, end);
    
       // TODO: implement emplace_back
-      #if 0
+      #ifdef HOST_OS
       pentries->emplace_back(abbrev_code, tag, has_child);
       #else
       pentries->push_back(AbbrevEntry(abbrev_code, tag, has_child));
@@ -276,7 +296,7 @@ class AbbrevTable {
   void dump() const {
     for (const auto& off_tbl : tables_) {
       // TODO %lu is not supported yet
-      #if 0
+      #ifdef HOST_OS
       printf("Got %lu abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
       #else
       printf("Got %d abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
@@ -411,7 +431,7 @@ class DwarfContext {
       lntab_.back().lineno = ln;
     } else {
       // TODO don't support emplace_back yet
-      #if 0
+      #ifdef HOST_OS
       lntab_.emplace_back(addr, file_name, ln);
       #else
       lntab_.push_back(LineNoEntry(addr, file_name, ln));
@@ -453,7 +473,7 @@ class DwarfContext {
 
   void dump_lntab() {
     // TODO sos does not support %lu yet
-    #if 0
+    #ifdef HOST_OS
     printf("The lntab contains %lu entries\n", lntab_.size());
     #else
     printf("The lntab contains %d entries\n", lntab_.size());
