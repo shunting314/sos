@@ -38,13 +38,17 @@ void backtrace() {
   do {
     const FunctionEntry* func_entry = get_dwarf_ctx().find_func_entry_by_addr(eip);
     const LineNoEntry* lineno_entry = get_dwarf_ctx().find_lineno_entry_by_addr(eip);
-    if (!func_entry || !lineno_entry) {
-      printf("Fail to get func/lineno entry for addr 0x%x\n", eip);
+    if (!lineno_entry) {
+      printf("Fail to get lineno entry for addr 0x%x\n", eip);
       // don't call assert to avoid infinite recursion.
       safe_assert(false);
     }
 
-    printf("  ebp 0x%x, eip 0x%x func %s (%s:%d)\n", ebp, eip, func_entry->name, lineno_entry->file_name, lineno_entry->lineno);
+    if (!func_entry) {
+      printf("  ebp 0x%x, eip 0x%x func %s (%s:%d)\n", ebp, eip, "Unknown", lineno_entry->file_name, lineno_entry->lineno);
+    } else {
+      printf("  ebp 0x%x, eip 0x%x func %s (%s:%d)\n", ebp, eip, func_entry->name, lineno_entry->file_name, lineno_entry->lineno);
+    }
 
     eip = ((uint32_t*) ebp)[1];
     ebp = *(uint32_t*) ebp;

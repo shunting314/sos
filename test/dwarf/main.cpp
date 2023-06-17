@@ -39,11 +39,8 @@ int main(int argc, char** argv) {
   // testing for the addresses printed in sos kernel backtrace
   // these may become invalid as sos kernel keeps evolving.
   uint32_t addrlist[] = {
-    0x10b1d7,
-    0x101d3e,
-    0x101d4c,
-    0x101d5a,
-    0x101dc0,
+    0x10942e,
+    0x10a2e0,
     0,
   };
   for (int i = 0; addrlist[i]; ++i) {

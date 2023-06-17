@@ -152,7 +152,7 @@ void DwarfContext::parse_elf(uint8_t* elfbuf) {
   for (int i = 0; i < nsec; ++i) {
     Elf32_Shdr* cursec = shdrtab + i;
     const char* secname = shstrtab + cursec->sh_name;
-    printf(" - %s\n", secname);
+    dprintf(" - %s\n", secname);
     if (strcmp(secname, ".debug_info") == 0) {
       debug_info_shdr = cursec;
     } else if (strcmp(secname, ".debug_abbrev") == 0) {
@@ -200,7 +200,7 @@ void DwarfContext::parse_elf(uint8_t* elfbuf) {
  * 'start' points to the start of the .debug_info section. Pass this in so we can
  * print the relative offset from 'start' for debugging.
  */
-void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, const uint8_t* cur, const uint8_t* end) {
+void DwarfContext::parse_debug_info_for_one_abbrev_off(uint32_t unit_offset, const uint8_t* start, const uint8_t* cur, const uint8_t* end) {
   uint16_t version = read_uint16(cur, end);
   assert(version == 5 && "assume it's DWARF v5");
   uint8_t unit_type = read_uint8(cur, end);
@@ -213,7 +213,8 @@ void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, con
   assert(pentries);
 
   while (cur < end) {
-    dprintf("Handle .debug_info offset 0x%lx\n", (cur - start));
+    uint32_t offset = cur - start;
+    dprintf("Handle .debug_info offset 0x%x\n", offset);
     uint32_t abbrev_code = read_ULEB128(cur, end);
     dprintf("Got abbrev_code %d\n", abbrev_code);
     if (!abbrev_code) {
@@ -226,7 +227,9 @@ void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, con
     }
 
     const char* fn_name = nullptr;
+    const char* linkage_name = nullptr;
     uint32_t lowpc = -1, fn_nbytes = -1;
+    uint32_t specification = -1;
 
     for (const auto& attr_form_pair : abbrev_entry->get_attr_form_pairs()) {
       uint32_t attr = attr_form_pair.first;
@@ -241,6 +244,9 @@ void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, con
 
         if (attr == DW_AT_name) {
           fn_name = str;
+        }
+        if (attr == DW_AT_linkage_name) {
+          linkage_name = str;
         }
         break;
       }
@@ -296,6 +302,9 @@ void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, con
       case DW_FORM_ref4: {
         uint32_t ref = read_uint32(cur, end);
         dprintf("ref4: 0x%x\n", ref);
+        if (attr == DW_AT_specification) {
+          specification = ref;
+        }
         break;
       }
       case DW_FORM_sec_offset: {
@@ -310,6 +319,9 @@ void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, con
         if (attr == DW_AT_name) {
           fn_name = str;
         }
+        if (attr == DW_AT_linkage_name) {
+          linkage_name = str;
+        }
         break;
       }
       default:
@@ -319,11 +331,25 @@ void DwarfContext::parse_debug_info_for_one_abbrev_off(const uint8_t* start, con
     }
   
     // add the function entry
-    if (abbrev_entry->tag() == DW_TAG_subprogram && fn_name && (lowpc != -1 || fn_nbytes != -1)) {
-      assert(fn_name);
-      assert(lowpc != -1);
-      assert(fn_nbytes != -1);
-      function_entries_.push_back({fn_name, lowpc, fn_nbytes});
+    if (!fn_name) {
+      fn_name = linkage_name;
+    }
+
+    if (abbrev_entry->tag() == DW_TAG_subprogram) {
+      if (!fn_name) {
+        assert(specification != -1);
+        fn_name = find_func_name_by_spec(specification + unit_offset);
+        assert(fn_name);
+      }
+
+      if (lowpc == -1) {
+        // declaration
+        // this can be referred to later by DW_TAG_specification
+        register_func_name(offset, fn_name);
+      } else {
+        assert(fn_nbytes != -1);
+        function_entries_.push_back({fn_name, lowpc, fn_nbytes});
+      }
     }
   }
   assert(cur == end);
@@ -347,18 +373,19 @@ void DwarfContext::parse_debug_info(const uint8_t* debug_info_buf, int debug_inf
 
   const uint8_t* cur = debug_info_buf, *end = debug_info_buf + debug_info_nbytes;
   while (cur < end) {
+    uint32_t unit_offset = cur - debug_info_buf; // used as offset for DW_AT_specification
     uint32_t len = read_uint32(cur, end);
     assert(cur + len <= end);
 
-    parse_debug_info_for_one_abbrev_off(debug_info_buf, cur, cur + len);
+    parse_debug_info_for_one_abbrev_off(unit_offset, debug_info_buf, cur, cur + len);
     cur = cur + len;
   }
   assert(cur == end);
 
   // dump the function entries
-  printf("Found %lu functions\n", function_entries_.size());
+  printf("Found %d functions\n", (int) function_entries_.size());
   for (auto& entry : function_entries_) {
-    printf("- '%s', 0x%x, %d\n", entry.name, entry.start, entry.len);
+    dprintf("- '%s', 0x%x, %d\n", entry.name, entry.start, entry.len);
   }
 }
 
@@ -397,13 +424,13 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
     read_ULEB128(cur, end);
   }
   uint32_t directories_count = read_ULEB128(cur, end);
-  printf("directories_count %d\n", directories_count);
+  dprintf("directories_count %d\n", directories_count);
   for (int i = 0; i < directories_count; ++i) {
     uint32_t off = read_uint32(cur, end);
-    printf("  dir %s\n", debug_line_str_buf_ + off);
+    dprintf("  dir %s\n", debug_line_str_buf_ + off);
   }
   uint8_t file_name_entry_format_count = read_uint8(cur, end);
-  printf("file name entry format count %d\n", file_name_entry_format_count);
+  dprintf("file name entry format count %d\n", file_name_entry_format_count);
   for (int i = 0; i < file_name_entry_format_count; ++i) {
     read_ULEB128(cur, end);
     read_ULEB128(cur, end);
@@ -411,15 +438,15 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
 
   uint32_t file_names_count = read_ULEB128(cur, end);
   vector<const char*> file_names;
-  printf("file name count %d\n", file_names_count);
+  dprintf("file name count %d\n", file_names_count);
   for (int i = 0; i < file_names_count; ++i) {
     uint32_t off = read_uint32(cur, end); // name
     read_ULEB128(cur, end); // directory. Should be uint8?
-    printf("  filename %s\n", debug_line_str_buf_ + off);
+    dprintf("  filename %s\n", debug_line_str_buf_ + off);
     file_names.push_back((const char*) debug_line_str_buf_ + off);
   }
 
-  printf("current off 0x%lx\n", cur - start); // TODO
+  dprintf("current off 0x%lx\n", cur - start); // TODO
   // For simplicities, I assume each instruction only contains one operation.
   // This is true for x86 (and most likely also be true for arm. but I need confirm)
   uint32_t cur_line = 1, cur_addr = 0;
@@ -434,6 +461,8 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
       uint32_t opcode = read_ULEB128(cur, end);
       switch (opcode) {
       case DW_LNE_end_sequence:
+        cur_addr = 0;
+        cur_line = 1;
         break;
       case DW_LNE_set_address:
         cur_addr = read_uint32(cur, end);
@@ -462,7 +491,7 @@ void DwarfContext::parse_debug_line_one_program(const uint8_t* start, const uint
         break;
       case DW_LNS_set_file:
         cur_file_idx = read_ULEB128(cur, end);
-        printf("Set file idx to %d\n", cur_file_idx);
+        dprintf("Set file idx to %d\n", cur_file_idx);
         cur_file_name = file_names[cur_file_idx];
         break;
       case DW_LNS_negate_stmt:

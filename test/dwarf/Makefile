@@ -6,4 +6,4 @@ hello: build
 	./a.out /tmp/hello.o
 
 build:
-	g++ -DHOST_OS -DDEBUG main.cpp ../../clib/dwarf.cpp -std=c++11
+	g++ -DHOST_OS -DNO_DEBUG main.cpp ../../clib/dwarf.cpp -std=c++11

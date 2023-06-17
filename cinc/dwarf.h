@@ -297,9 +297,9 @@ class AbbrevTable {
     for (const auto& off_tbl : tables_) {
       // TODO %lu is not supported yet
       #ifdef HOST_OS
-      printf("Got %lu abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
+      dprintf("Got %lu abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
       #else
-      printf("Got %d abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
+      dprintf("Got %d abbrev entries for offset 0x%x:\n", off_tbl.second.size(), off_tbl.first);
       #endif
 
       if (DEBUG) {
@@ -413,7 +413,7 @@ class DwarfContext {
     abbrev_table_.dump();
   }
   void parse_debug_info(const uint8_t* debug_info_buf, int debug_info_nbytes);
-  void parse_debug_info_for_one_abbrev_off(const uint8_t* start, const uint8_t* cur, const uint8_t* end);
+  void parse_debug_info_for_one_abbrev_off(uint32_t unit_offset, const uint8_t* start, const uint8_t* cur, const uint8_t* end);
   void parse_debug_line(const uint8_t* debug_line_buf, int debug_line_nbytes);
   // parse for one line number program
   void parse_debug_line_one_program(const uint8_t* start, const uint8_t* cur, const uint8_t* end);
@@ -485,6 +485,20 @@ class DwarfContext {
     }
   }
 
+  void register_func_name(uint32_t offset, const char *fn_name) {
+    offset_to_func_name_.push_back(make_pair(offset, fn_name));
+  }
+
+  // TODO avoid doing linear scan
+  const char* find_func_name_by_spec(uint32_t spec) {
+    for (auto& kv : offset_to_func_name_) {
+      if (spec == kv.first) {
+        return kv.second;
+      }
+    }
+    return nullptr; 
+  }
+
   AbbrevTable abbrev_table_;
   uint8_t* debug_str_buf_;
   uint32_t debug_str_nbytes_;
@@ -492,6 +506,17 @@ class DwarfContext {
   uint32_t debug_line_str_nbytes_;
   vector<FunctionEntry> function_entries_;
   vector<LineNoEntry> lntab_;
+
+  /*
+   * A class method may have 2 DW_TAG_subprogram entries.
+   * The first entry is for the declaration and contains the method name;
+   * the second entry is for the definition and contains low/high pc.
+   * But the second entry may not contains the method name but refer
+   * to the first entry using its offset with DW_AT_specification .
+   * Refer to this SO post for more details:
+   *   https://stackoverflow.com/questions/37780465/c-class-methods-do-not-have-an-address-range-in-dwarf-info
+   */
+  vector<pair<uint32_t, const char*>> offset_to_func_name_;
 
   uint8_t* elfbuf_;
  public:
