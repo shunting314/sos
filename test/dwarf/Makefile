@@ -1,5 +1,5 @@
 all: build
-	./a.out ../../out/kernel/kernel
+	./a.out ../../out/kernel/kernel.sym
 
 hello: build
 	i686-elf-gcc -g -c hello.c -o /tmp/hello.o

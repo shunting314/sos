@@ -19,7 +19,7 @@ void test_kernel();
 char buf[65546] = {1};
 #endif
 
-#define TEST_BACKTRACE 1
+#define TEST_BACKTRACE 0
 
 #if TEST_BACKTRACE
 void g() {

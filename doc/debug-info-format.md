@@ -9,3 +9,4 @@
 - [DWARF official site](https://dwarfstd.org/): redirect to web.archive.org automatically.
 - [Introduction to the DWARF Debugging Format](https://web.archive.org/web/20220808162022/https://www.dwarfstd.org/doc/Debugging%20using%20DWARF-2012.pdf): it's a very awesome description of dwarf format by the chair of the dwarf standard committee.
 - [DWARF5 Spec](https://dwarfstd.org/doc/DWARF5.pdf)
+- [Split debug info from executable](https://stackoverflow.com/questions/866721/how-to-generate-gcc-debug-symbol-outside-the-build-target): also check man page of objcopy. The section for `--only-keep-debug` shows the full list of commands to split debug info out of an executable.
