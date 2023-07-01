@@ -13,6 +13,21 @@ DirEnt* DirEntIterator::operator*() {
   return (DirEnt*) (buf_ + (entIdx_ * sizeof(DirEnt)) % BLOCK_SIZE);
 }
 
+uint32_t DirEnt::logicalToPhysBlockId(uint32_t logicalBlockId) const {
+  if (logicalBlockId < N_DIRECT_BLOCK) {
+    return blktable[logicalBlockId];
+  } else if (logicalBlockId < N_DIRECT_BLOCK + BLOCK_SIZE / 4) {
+    // load the indirect block. 
+    // TODO Should we cache it?
+    // TODO Can we not allocate the block on stack?
+    uint32_t buf[BLOCK_SIZE / 4];
+    SimFs::get().readBlock(blktable[IND_BLOCK_IDX_1], (uint8_t*) buf);
+    return buf[logicalBlockId - N_DIRECT_BLOCK];
+  } else {
+    assert(false && "can not fully support level-2 indirect block yet");
+  }
+}
+
 DirEntIterator DirEnt::begin() const {
   assert(isdir());
   return DirEntIterator(this, 0);

@@ -9,10 +9,10 @@
 #include <stdlib.h>
 #include <app_init_state.h>
 
-// TODO: this trivial implementation only handle ELF file less than 10x BLOCK_SIZE!
-// We should improve this once we have kmalloc!
+// TODO: this trivial implementation only handle ELF file less than around 1000x BLOCK_SIZE!
+// TODO: dynamically allocate the memory using kmalloc
 // TODO: not reentrant
-uint8_t launch_buf[BLOCK_SIZE * 10];
+uint8_t launch_buf[BLOCK_SIZE * 10 + BLOCK_SIZE * 1024];
 
 int launch(const char* path) {
   auto dent = SimFs::get().walkPath((char*) path);

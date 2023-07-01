@@ -101,10 +101,7 @@ class DirEnt {
     return ent_type == ET_DIR;
   }
 
-  uint32_t logicalToPhysBlockId(uint32_t logicalBlockId) const {
-    assert(logicalBlockId < N_DIRECT_BLOCK); // TODO support large file that have indirct block
-    return blktable[logicalBlockId];
-  }
+  uint32_t logicalToPhysBlockId(uint32_t logicalBlockId) const;
 
   // read the whole block for file offset off
 	void readBlockForOff(int off, char* buf);

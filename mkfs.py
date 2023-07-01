@@ -16,6 +16,8 @@ NDIRENT_PER_BLOCK = BLOCK_SIZE // DIRENT_SIZE
 MAX_FILE_NAME = 64
 N_DIRECT_BLOCK = 10
 IND_BLOCK_IDX_2 = 11
+BLOCK_ID_SIZE = 4  # each block id takes 4 bytes
+NUM_BLOCK_IDS_PER_BLOCK = BLOCK_SIZE // BLOCK_ID_SIZE
 
 @dataclass
 class MkfsCtx:
@@ -62,20 +64,37 @@ class MkfsCtx:
         return bool(re.search(self.entry_to_skip, path))
 
 def write_dirent(ctx: MkfsCtx, dirent_loc: int, name: str, size: int, blocklist: List[int], isdir: bool):
-    ctx.img_file_fd.seek(dirent_loc)
+    ctx.seek(dirent_loc)
     bin_name = name.encode("utf-8")
     assert len(bin_name) < MAX_FILE_NAME
     bin_name = bin_name + b"\0" * (MAX_FILE_NAME - len(bin_name))
     ctx.img_file_fd.write(bin_name)
     ctx.writeint(size)
-    
-    # TODO: handle large file by using indirect blocks
-    assert len(blocklist) <= N_DIRECT_BLOCK
-    blocktbl = blocklist + [0] * (IND_BLOCK_IDX_2 + 1 - len(blocklist))
+  
+    extra_blocks_to_set = []
+    if len(blocklist) <= N_DIRECT_BLOCK:
+        blocktbl = blocklist + [0] * (IND_BLOCK_IDX_2 + 1 - len(blocklist))
+    elif len(blocklist) <= N_DIRECT_BLOCK + NUM_BLOCK_IDS_PER_BLOCK:
+        indirect_blk_id = ctx.allocate_block(1)[0]
+        blocktbl = blocklist[:N_DIRECT_BLOCK] + [indirect_blk_id, 0]
+        extra_blocks_to_set.append((indirect_blk_id, blocklist[N_DIRECT_BLOCK:]))
+    else:
+        # TODO: handle large file that needs level-2 indirect blocks
+        assert False, "Can not support large file that needs level-2 indirect blocks yet"
+
     for bid in blocktbl:
         ctx.writeint(bid)
 
     ctx.writeint(isdir, 1) 
+
+    # handle extra_blocks_to_set in the end so we don't need bother seek back to
+    # the previous file write position
+    for blkid, payload in extra_blocks_to_set:
+        assert len(payload) <= NUM_BLOCK_IDS_PER_BLOCK
+        ctx.seek(blkid * BLOCK_SIZE)
+        for i in range(NUM_BLOCK_IDS_PER_BLOCK):
+            val = payload[i] if i < len(payload) else 0
+            ctx.writeint(val, 4)
 
 def handle_file(ctx: MkfsCtx, dirent_loc: int, curname: str, curpath: str):
     r"""
