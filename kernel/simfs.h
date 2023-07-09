@@ -206,6 +206,9 @@ class SimFs {
   void readBlock(int blockId, uint8_t buf[], int len = BLOCK_SIZE);
 	void writeBlock(int blockId, const uint8_t* buf);
 
+  // read the content of file. The caller is responsible to free the buffer.
+  uint8_t* readFile(const char* path, int* psize=nullptr);
+
   // return DirEnt for path
   DirEnt walkPath(const char* path);
 

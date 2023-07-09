@@ -6,8 +6,8 @@
 
 extern char END[];
 
-// TODO: hardcode to 10M for now. Should find a way to detect this automatically
-uint32_t phys_mem_amount = 10 * 1024 * 1024; // unit is byte
+// TODO: hardcode to 100M for now. Should find a way to detect this automatically
+uint32_t phys_mem_amount = 100 * 1024 * 1024; // unit is byte
 PhysPageStat* phys_page_stats;
 
 struct physical_page {

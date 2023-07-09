@@ -18,9 +18,18 @@ asm_get_eip:
   ret
 )");
 
+#if DWARF_IN_KERNEL
 // the kernel elf file is loaded here
 #define ELF_ADDR ((void*) 0x10000)
 DwarfContext _dwarf_ctx((uint8_t*) ELF_ADDR, false);
+#else
+DwarfContext _dwarf_ctx(nullptr, false);
+#endif
+
+// do this before get_dwarf_ctx is called.
+void set_dwarf_ctx_elf_buf(uint8_t* buf) {
+  _dwarf_ctx.set_buf(buf);
+}
 
 DwarfContext& get_dwarf_ctx() {
   if (!_dwarf_ctx.initialized) {

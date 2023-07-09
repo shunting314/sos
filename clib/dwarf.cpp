@@ -132,7 +132,8 @@ const char* dwlne2str(uint32_t opcode) {
   }
 }
 
-void DwarfContext::parse_elf(uint8_t* elfbuf) {
+void DwarfContext::parse_elf() {
+  uint8_t* elfbuf = elfbuf_;
   if (elfbuf[0] != 0x7F || elfbuf[1] != 'E' || elfbuf[2] != 'L' || elfbuf[3] != 'F') {
     safe_assert(false && "Invalid elf file\n");
   }
@@ -540,4 +541,11 @@ void DwarfContext::parse_debug_line(const uint8_t* debug_line_buf, int debug_lin
 
   postprocess_lntab();
   dump_lntab();
+}
+
+void DwarfContext::init() {
+  assert(!initialized);
+  initialized = true;
+  assert(elfbuf_);
+  parse_elf();
 }

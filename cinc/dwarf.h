@@ -371,13 +371,13 @@ class DwarfContext {
     }
   }
 
-  void parse_elf(uint8_t* elfbuf);
-
-  void init() {
-    assert(!initialized);
-    initialized = true;
-    parse_elf(elfbuf_);
+  void set_buf(uint8_t* buf) {
+    elfbuf_ = buf;
   }
+
+  void parse_elf();
+
+  void init();
 
   const FunctionEntry* find_func_entry_by_addr(uint32_t addr) {
     for (const auto& entry : function_entries_) {

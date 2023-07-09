@@ -28,6 +28,7 @@ extern "C" {
   enum { CONCAT(static_assert_enum_value__, __LINE__) = 1 / !!(cond), }
 #endif
 
+void set_dwarf_ctx_elf_buf(uint8_t* buf);
 void backtrace();
 
 // TODO: check NDEBUG?

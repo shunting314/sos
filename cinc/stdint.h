@@ -7,8 +7,6 @@ typedef int bool;
 #define false 0
 #endif
 
-#include <assert.h>
-
 typedef char int8_t;
 typedef unsigned char uint8_t;
 typedef short int int16_t;
@@ -17,6 +15,8 @@ typedef int int32_t;
 typedef unsigned int uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
+
+#include <assert.h>
 
 static_assert(sizeof(int8_t) == 1);
 static_assert(sizeof(uint8_t) == 1, "Check size of uint8_t");

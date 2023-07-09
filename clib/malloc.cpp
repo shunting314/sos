@@ -59,6 +59,7 @@ struct FreeBlock {
 FreeBlock* free_block_head = nullptr;
 
 void setup_malloc(void *start, uint32_t size) {
+  printf("setup malloc start %p size 0x%x\n", start, size);
   assert(size > 2 * META_SIZE + MIN_BLOCK_FREE_BYTES);
 
   free_block_head = (FreeBlock*) start;

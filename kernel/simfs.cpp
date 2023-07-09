@@ -14,18 +14,21 @@ DirEnt* DirEntIterator::operator*() {
 }
 
 uint32_t DirEnt::logicalToPhysBlockId(uint32_t logicalBlockId) const {
+  uint32_t phys_blk = 0;
   if (logicalBlockId < N_DIRECT_BLOCK) {
-    return blktable[logicalBlockId];
+    phys_blk = blktable[logicalBlockId];
   } else if (logicalBlockId < N_DIRECT_BLOCK + BLOCK_SIZE / 4) {
     // load the indirect block. 
     // TODO Should we cache it?
     // TODO Can we not allocate the block on stack?
     uint32_t buf[BLOCK_SIZE / 4];
     SimFs::get().readBlock(blktable[IND_BLOCK_IDX_1], (uint8_t*) buf);
-    return buf[logicalBlockId - N_DIRECT_BLOCK];
+    phys_blk = buf[logicalBlockId - N_DIRECT_BLOCK];
   } else {
     assert(false && "can not fully support level-2 indirect block yet");
   }
+  assert(phys_blk > 0); // 0 is the super block
+  return phys_blk;
 }
 
 DirEntIterator DirEnt::begin() const {
@@ -332,6 +335,33 @@ void SimFs::flushSuperBlock() {
 	writeBlock(0, (const uint8_t*) buf);
 }
 
+static uint8_t a_phys_buf[BLOCK_SIZE];
+uint8_t* SimFs::readFile(const char* path, int* psize) {
+  auto dent = walkPath(path);
+  if (!dent) {
+    printf("Path does not exist %s\n", path);
+    return nullptr;
+  }
+  uint8_t* buf = (uint8_t*) malloc(ROUND_UP(dent.file_size, BLOCK_SIZE));
+  uint8_t* ptr = buf;
+  for (int i = 0; i < dent.file_size; i += BLOCK_SIZE) {
+    uint32_t logical_blkid = i / BLOCK_SIZE;
+    uint32_t phys_blkid = dent.logicalToPhysBlockId(logical_blkid);
+
+    // TODO since readBlock requires a physical memory, we can not read into
+    // 'ptr' directly. Use a_phys_buf as a bridge.
+    // An alternative is to create an API to map virtual address to physical
+    // address. In that case, we should be able to avoid the memmove.
+    readBlock(phys_blkid, a_phys_buf);
+    memmove(ptr, a_phys_buf, BLOCK_SIZE);
+    ptr += BLOCK_SIZE;
+  }
+  if (psize) {
+    *psize = dent.file_size;
+  }
+  return buf;
+}
+
 /*
  * return 0 on success
  */
@@ -357,21 +387,15 @@ int ls(char* path) {
  * return 0 on success
  */
 int cat(char* path) {
-  auto dent = SimFs::get().walkPath(path);
-  if (!dent) {
-    printf("Path does not exist %s\n", path);
+  int filesize;
+  uint8_t* buf = SimFs::get().readFile(path, &filesize);
+  if (!buf) {
     return -1;
   }
-  uint8_t buf[BLOCK_SIZE];
-  for (int i = 0; i < dent.file_size; i += BLOCK_SIZE) {
-    uint32_t logical_blkid = i / BLOCK_SIZE;
-    uint32_t phys_blkid = dent.logicalToPhysBlockId(logical_blkid);
-    SimFs::get().readBlock(phys_blkid, buf);
 
-    int len = min(BLOCK_SIZE, dent.file_size - i);
-    for (int j = 0; j < len; ++j) {
-      printf("%c", (char)buf[j]);
-    }
+  for (int i = 0; i < filesize; ++i) {
+    printf("%c", (char)buf[i]);
   }
+  free(buf);
   return 0;
 }

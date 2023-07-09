@@ -108,9 +108,9 @@ void setup_paging() {
   map_region((phys_addr_t)kernel_page_dir, 4096, 4096, (uint32_t) phys_mem_amount - 4096, MAP_FLAG_WRITE); // user no access; kernel read/write
 
   // setup the heap. Don't do COW for simplicity for now.
-  // Allocate the 1MB after the end of phys_mem_amount as heap space.
+  // Allocate the 2MB after the end of phys_mem_amount as heap space.
   // Revisit if this becomes too small.
-  map_region_alloc((phys_addr_t) kernel_page_dir, phys_mem_amount, 1 << 20, MAP_FLAG_WRITE);
+  map_region_alloc((phys_addr_t) kernel_page_dir, phys_mem_amount, (1 << 20) * 2, MAP_FLAG_WRITE);
 
   asm_set_cr3((uint32_t)kernel_page_dir);
   asm_cr0_enable_flags(CR0_PG | CR0_WP);

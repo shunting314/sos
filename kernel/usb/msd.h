@@ -81,7 +81,10 @@ class MassStorageDevice : public USBDevice<ControllerDriver> {
   void readBlocks(uint32_t lba_start, uint32_t nblock, uint8_t* buf) {
     assert(lba_start >= 0);
     assert(nblock > 0);
-    assert(lba_start + nblock - 1 < totalNumBlocks_);
+    if (lba_start + nblock - 1 >= totalNumBlocks_) {
+      printf("readBlocks lba_start %d, nblock %d, totalNumBlocks_ %d\n", lba_start, nblock, totalNumBlocks_);
+      assert(false && "readBlocks out of range");
+    }
 
     scsi::Read10 cmd(lba_start, nblock);
     handleInCommand((uint8_t*) &cmd, sizeof(cmd), buf, nblock * blockSize_);

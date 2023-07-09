@@ -19,7 +19,7 @@ void test_kernel();
 char buf[65546] = {1};
 #endif
 
-#define TEST_BACKTRACE 0
+#define TEST_BACKTRACE 1
 
 #if TEST_BACKTRACE
 void g() {
@@ -38,7 +38,7 @@ void test_backtrace() {
 void setup_malloc(void *start, uint32_t size); // this is defined in clib/malloc.cpp
 static void setup_kernel_malloc() {
   // be consistent with setup_paging()
-  setup_malloc((void*) phys_mem_amount, 1 << 20); 
+  setup_malloc((void*) phys_mem_amount, (1 << 20) * 2); 
 }
 
 extern "C" void kernel_main() {
@@ -66,6 +66,9 @@ extern "C" void kernel_main() {
 #endif
   usb_init();
   SimFs::get().init();
+
+  // NOTE the allocated memory from readFile is not freed.
+  set_dwarf_ctx_elf_buf(SimFs::get().readFile("/kernel.sym"));
 
   test_kernel();
 #if TEST_BACKTRACE
