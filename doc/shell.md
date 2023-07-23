@@ -26,4 +26,5 @@ Write a shell in the host os first and then try to migrate it to sos.
   - explain impleneting a shell in a very principled way.
   - support both pipe and io-rediction
   - support chaining any number of commands with pipe
+  - it changes shell's stdin/out to the redirected in/out which is a bit dangeruous to mess up things
   - QUOTE: "No shell is complete without wildcards". lol
