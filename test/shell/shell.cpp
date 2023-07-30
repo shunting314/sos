@@ -1,3 +1,7 @@
+/*
+Example command:
+  cat shell.cpp | awk '{print NF}' | sort | uniq -c | sort -nr
+ */
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -23,12 +27,15 @@
 
 /*
  * 'line' may be mutated.
+ * Have basic support of quotation.
  */
 void parse_line(char* line, char** words, int capacity, int& nword) {
 	nword = 0;
 	char* cur = line;
 	char* end = line + strlen(line);
 	char* next;
+  char start_quote = 0;
+
 	while (cur < end) {
 		// skip spaces
 		while (cur != end && isspace(*cur)) {
@@ -38,8 +45,13 @@ void parse_line(char* line, char** words, int capacity, int& nword) {
 			break;
 		}
 
+    start_quote = 0;
+    if (*cur == '\'' || *cur == '"') {
+      start_quote = *cur;
+      ++cur;
+    }
 		next = cur;
-		while (next != end && !isspace(*next)) {
+		while (next != end && (!start_quote && !isspace(*next) || start_quote && *next != start_quote)) {
 			++next;
 		}
 		*next = '\0';
@@ -49,12 +61,46 @@ void parse_line(char* line, char** words, int capacity, int& nword) {
 	}
 }
 
-void execute_command(char** words, int nword) {
+/*
+ * Run a single command with the specified stdin and out
+ */
+int run_single_command(char** words, int nword, int current_in, int current_out) {
+  int childpid;
+
+	childpid = fork();
+	if (childpid < 0) {
+		assert(false && "fail to fork");
+	}
+	if (childpid == 0) {
+		// in child process
+    if (current_in != 0) {
+      dup2(current_in, 0);
+      close(current_in);
+    }
+    if (current_out != 1) {
+      dup2(current_out, 1);
+      close(current_out);
+    }
+    // printf("execvp '%s'\n", words[0]);
+		execvp(words[0], words);
+		assert(false && "fail to run exec");
+	}
+
+  // close curernt_in/current_out in the parent process
+  if (current_in != 0) {
+    close(current_in);
+  }
+  if (current_out != 1) {
+    close(current_out);
+  }
+  return childpid;
+}
+
+int execute_command(char** words, int nword) {
   int redirect_in = 0;
   int redirect_out = 1;
+  int remaining_in;
   int current_in, current_out;
-
-  int childpid, exit_status;
 
 	assert(nword > 0);
 
@@ -79,7 +125,7 @@ void execute_command(char** words, int nword) {
     redirect_in = open(infile, O_RDONLY);
     if (redirect_in < 0) {
       printf("Fail to open in file '%s'\n", infile);
-      goto out;
+      return -1;
     }
   }
 
@@ -87,46 +133,56 @@ void execute_command(char** words, int nword) {
     redirect_out = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (redirect_out < 0) {
       printf("Fail to open out file '%s'\n", outfile);
-      goto out;
+      if (redirect_in != 0) {
+        close(redirect_in);
+      }
+      return -1;
     }
   }
 
-  // TODO revise for pipe
-  current_in = redirect_in;
-  current_out = redirect_out;
+  remaining_in = redirect_in;
 
-	childpid = fork();
-	if (childpid < 0) {
-		assert(false && "fail to fork");
-	}
-	if (childpid == 0) {
-		// in child process
-    if (current_in != 0) {
-      dup2(current_in, 0);
-      close(current_in);
+  int start_pos = 0;
+  int last_child = -1;
+  assert(nword > 0);
+  while (start_pos < nword) {
+    // find the next pipe
+    int pipe_pos = start_pos;
+    for (; pipe_pos < nword && strcmp(words[pipe_pos], "|") != 0; ++pipe_pos) {
     }
-    if (current_out != 1) {
-      dup2(current_out, 1);
-      close(current_out);
+    if (pipe_pos == nword) {
+      // no more pipe
+      current_in = remaining_in;
+      current_out = redirect_out;
+    } else {
+      // found a pipe
+      int pipe_fds[2];
+      CHECK_STATUS(pipe(pipe_fds));
+      current_in = remaining_in;
+      current_out = pipe_fds[1];
+
+      remaining_in = pipe_fds[0];
     }
-    // printf("execvp '%s'\n", words[0]);
-		execvp(words[0], words);
-		assert(false && "fail to run exec");
-	}
-	int wstatus;
-	waitpid(childpid, &wstatus, 0);
+
+    // start child process for words between [start_pos, pipe_pos)
+    // with current_in/current_out as stdin/out
+    words[pipe_pos] = nullptr;
+    last_child = run_single_command(words + start_pos, pipe_pos - start_pos, current_in, current_out);
+
+    start_pos = pipe_pos + 1;
+  }
+
+  assert(last_child >= 0);
+
+  // wait for the last child
+	int wstatus, exit_status;
+	waitpid(last_child, &wstatus, 0);
 	exit_status = WEXITSTATUS(wstatus);
 	if (exit_status != 0) {
 		printf("Fail to run command, exit status %d\n", exit_status);
+    return -1;
 	}
-
-out:
-  if (redirect_in != 0) {
-    close(redirect_in);
-  }
-  if (redirect_out != 1) {
-    close(redirect_out);
-  }
+  return 0;
 }
 
 typedef int builtin_fn_t(char** words, int nword);
@@ -214,9 +270,6 @@ int main(void) {
       continue;
     }
 		execute_command(words, nword);
-
-		// TODO support pipe
-		// TODO support chaining multiple pipes
 	}
 	debug("\nbye\n");
 	return 0;
