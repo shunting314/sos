@@ -1,6 +1,7 @@
 #include <kernel/fileapi.h>
 #include <kernel/user_process.h>
 #include <kernel/simfs.h>
+#include <kernel/keyboard.h>
 #include <assert.h>
 
 // TODO: fail if the path is for a dir
@@ -28,6 +29,20 @@ int file_read(int fd, void *buf, int nbyte) {
 	if (nbyte <= 0 || !buf) {
 		return -1;
 	}
+
+  // TODO need revise this part once we support IO redirection
+  if (fd == 0) {
+    char* s = (char*) buf;
+    int cnt = 0;
+    while (cnt < nbyte) {
+      char ch = keyboardGetChar(false);
+      if (ch == -1) {
+        break;
+      }
+      s[cnt++] = ch;
+    }
+    return cnt;
+  }
 	return UserProcess::current()->getFdptr(fd)->read(buf, nbyte);
 }
 

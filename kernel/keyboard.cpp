@@ -49,17 +49,28 @@ void keyboardInit() {
   // nothing need to be done so far..
 }
 
-char keyboardGetChar() {
-  while (kbdBuffer.numBuffered() == 0) {
+/*
+ * Sometimes we really want keyboardGetChar to be unblocking. E.g., user mode
+ * makes a syscall to read a character from the console. We disable interrupt
+ * for syscall. If we are blocking here, then there will be a dead loop.
+ */
+char keyboardGetChar(bool blocking) {
+  if (blocking) {
+    while (kbdBuffer.numBuffered() == 0) {
+    }
   }
-  return kbdBuffer.getChar();
+  if (kbdBuffer.numBuffered()) {
+    return kbdBuffer.getChar();
+  } else {
+    return -1;
+  }
 }
 
 int keyboardReadLine(char* buf, int len) {
   int nread = 0;
   assert(len >= 2); // at least read 1 char that's not '\0'
   while (nread < len - 1) {
-    char ch = keyboardGetChar(); // blocking call
+    char ch = keyboardGetChar(true); // blocking call
     buf[nread++] = ch;
     if (ch == '\n') {
       break;

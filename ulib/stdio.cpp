@@ -50,3 +50,23 @@ int printf(const char* fmt, ...) {
   return ret;
 }
 
+static char getchar() {
+  char ch;
+  while (read(0, &ch, 1) == 0) {
+  }
+  return ch;
+}
+
+char* fgets(char* s, int size, FILE* /* steram */) {
+  int cnt = 0;
+  while (cnt < size - 1) {
+    // TODO could be more efficient by reading multiple characters at once?
+    char ch = getchar();
+    s[cnt++] = ch;
+    if (ch == '\n') {
+      break;
+    }
+  }
+  s[cnt] = '\0';
+  return s;
+}
