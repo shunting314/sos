@@ -28,9 +28,8 @@ int write(int fd, const char* buf, int sz) {
   return syscall(SC_WRITE, fd, (int) buf, sz, PHARG, PHARG);
 }
 
-// TODO should we accept 1 argument as the exit status?
-int exit() {
-  return syscall(SC_EXIT, PHARG, PHARG, PHARG, PHARG, PHARG);
+int exit(int status) {
+  return syscall(SC_EXIT, status, PHARG, PHARG, PHARG, PHARG);
 }
 
 int dumbfork() {
@@ -55,4 +54,12 @@ int read(int fd, void *buf, int nbyte) {
 
 int close(int fd) {
   return syscall(SC_CLOSE, fd, PHARG, PHARG, PHARG, PHARG);
+}
+
+/*
+ * Note we return the child process's exit status in *pstatus directly.
+ * This may not be compatible with POSIX.
+ */
+int waitpid(int pid, int *pstatus, int /* options */) {
+  return syscall(SC_WAITPID, pid, (int) pstatus, PHARG, PHARG, PHARG);
 }

@@ -11,8 +11,8 @@ int sys_write(int fd, void *buf, int cnt) {
 }
 
 // terminate the current process
-int sys_exit() {
-  UserProcess::terminate_current_process();
+int sys_exit(int status) {
+  UserProcess::terminate_current_process(status);
   assert(false && "never reach here");
   return 0;
 }
@@ -41,6 +41,16 @@ int sys_close(int fd) {
   return file_close(fd);
 }
 
+/*
+ * Return the child process id on success and -1 on error.
+ * Note that if the child process is not terminated yet when this function is called,
+ * we never gonna return to this call frame but the scheduler will resume the
+ * parent process directly when the child process has teminated.
+ */
+int sys_waitpid(int pid, int *pstatus) {
+  return UserProcess::current()->waitpid(pid, pstatus);
+}
+
 void *sc_handlers[NUM_SYS_CALL] = {
   nullptr, // number 0
   // "[SC_WRITE] = fptr; " seems work in C but is not supported by C++.
@@ -53,6 +63,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
 	/* SC_OPEN */ (void*) sys_open,
 	/* SC_READ */ (void*) sys_read,
   /* SC_CLOSE */ (void*) sys_close,
+  /* SC_WAITPID */ (void*) sys_waitpid,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

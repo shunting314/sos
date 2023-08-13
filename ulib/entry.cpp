@@ -10,7 +10,9 @@ entry:
   add $4, %esp
 
   call main
+  push %eax  # exit code
   call exit
+  # no need to pop since we can not reach here
 )");
 
 /*

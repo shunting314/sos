@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <syscall.h>
+#include <assert.h>
 
 class RAIICls {
  public:
@@ -24,6 +25,7 @@ RAIICls global_obj_first("the first global object");
 RAIICls global_obj_second("the second global object");
 
 int main(void) {
+  int exit_code = 12;
   printf("Enter the main function\n");
   int sum = 0;
   for (int i = 1; i <= 100; ++i) {
@@ -43,10 +45,16 @@ int main(void) {
       printf("Message from child process %d [current pid is %d]\n", i, getpid());
     }
   } else {
+    // wait for child process to complete first
+    int status;
+    int rval = waitpid(r, &status, 0);
+    assert(status == exit_code);
+    assert(rval == r);
+
     for (int i = 0; i < 5; ++i) {
       printf("Message from parent process %d [r=%d]\n", i, r);
     }
   }
   printf("bye\n");
-  return 0;
+  return exit_code;
 }

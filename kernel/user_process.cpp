@@ -51,6 +51,11 @@ UserProcess* UserProcess::allocate() {
   for (int i = /* 0 */ 1; i < N_PROCESS; ++i) {
     if (!g_process_list[i].allocated_) {
       g_process_list[i].allocated_ = true;
+      g_process_list[i].parent_pid_ = -1;
+      g_process_list[i].terminated_ = false;
+
+      g_process_list[i].wait_for_child_ = nullptr;
+      g_process_list[i].wait_for_pstatus_ = nullptr;
       return &g_process_list[i];
     }
   }
@@ -94,15 +99,27 @@ void UserProcess::sched(UserProcess* cur) {
   }
   int start_idx = (UserProcess*) cur - &g_process_list[0];
   int curr_idx = start_idx;
+  int nallocated = 0;
   for (int i = 0; i < N_PROCESS; ++i) {
     curr_idx = (curr_idx + 1) % N_PROCESS;
     UserProcess* next_proc = &g_process_list[curr_idx];
-    if (next_proc->allocated_) {
+
+    if (!next_proc->allocated_) {
+      continue;
+    }
+    ++nallocated;
+    if (next_proc->wait_for_child_) {
+      next_proc->waitchild(); 
+
+      // reach here if next_proc is not ready for running yet. Check the next one.
+      continue;
+    } else {
       next_proc->resume();
     }
   }
 
   // no active processes any more, run kshell
+  assert(nallocated == 0 && "deadlock?");
   kshell();
 }
 
@@ -145,4 +162,68 @@ int UserProcess::allocFd(const char* path, int rwflags, bool checkall) {
 	} else {
 		return fd;
 	}
+}
+
+int UserProcess::waitpid(int child_pid, int *pstatus) {
+  if (child_pid < 0 || child_pid >= N_PROCESS) {
+    return -1;
+  }
+  UserProcess* child_process = &g_process_list[child_pid];
+
+  // only the parent process can wait for the child and query its exit status
+  if (child_process->parent_pid_ != get_pid()) {
+    return -1;
+  }
+  assert(child_process->allocated_);
+  if (child_process->terminated_) {
+    // this function is called by syscall. So we still have access to *pstatus
+    // using the current active page directory.
+    *pstatus = child_process->exit_status_;
+    child_process->release();
+    return child_pid;
+  } else {
+    // the child process has not exit yet.
+    // Record the child process and pstatus pointer so the scheduler can
+    // handle them later when the child process has terminated.
+
+    wait_for_child_ = child_process;
+    wait_for_pstatus_ = pstatus;
+    sched(nullptr);
+    // never return here
+  }
+  assert(false && "never reach here");
+  return -1;
+}
+
+/*
+ * Resume the current process if child has already terminated. Otherwise return.
+ * Called by the scheduler.
+ */
+void UserProcess::waitchild() {
+  assert(wait_for_child_);
+  assert(wait_for_pstatus_);
+
+  assert(wait_for_child_->allocated_);
+  if (!wait_for_child_->terminated_) {
+    return;  // child is still alive
+  }
+
+  int *user_mode_pstatus = wait_for_pstatus_;
+  UserProcess* child_process = wait_for_child_;
+
+  // clear wait_for_pstatus_ and wait_for_child_ so the scheduler will schedule
+  // this process next time.
+  wait_for_child_ = nullptr;
+  wait_for_pstatus_ = nullptr;
+
+  int child_status = child_process->exit_status_;
+  child_process->release(); // release the child process data structure
+
+  // setup the return value properly and resume the current process
+  intr_frame_.eax = child_process->get_pid();
+
+  // we need reload the current process's cr3 before we can write *user_mode_pstatus
+  asm_set_cr3(pgdir_);
+  *user_mode_pstatus = child_status;
+  resume();
 }

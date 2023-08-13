@@ -3,18 +3,24 @@
 #include <assert.h>
 #include <string.h>
 
-void UserProcess::terminate_current_process() {
-  UserProcess::current()->terminate();
+void UserProcess::terminate_current_process(int status) {
+  UserProcess::current()->terminate(status);
 }
 
-void UserProcess::terminate() {
+void UserProcess::terminate(int status) {
   // switch to the kernel pagedir
   asm_set_cr3((uint32_t) kernel_page_dir);
 
   release_pgdir(pgdir_);
 
   // release the process struture and clear the state
-  memset(this, 0, sizeof(*this));
+  if (parent_pid_ < 0) {
+    release(); // release directly since there would be no parent process waiting for this one
+  } else {
+    // turns into a zombie process
+    terminated_ = true;
+    exit_status_ = status;
+  }
   set_current(nullptr); // reset current process ptr
 
   sched(this);

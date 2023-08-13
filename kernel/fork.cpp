@@ -13,10 +13,10 @@
 #include <kernel/paging.h>
 #include <assert.h>
 
-// TODO implement COW
 UserProcess* UserProcess::clone(bool use_cow) {
   auto* child = allocate();
   auto* parent = this;
+  child->parent_pid_ = parent->get_pid();
   child->intr_frame_ = parent->intr_frame_;
   child->pgdir_ = clone_address_space(parent->pgdir_, use_cow);
   return child;

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <kernel/idt.h>
 #include <kernel/file_desc.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,11 +14,16 @@ extern "C" {
 class UserProcess {
  public:
   void resume();
-  void terminate();
+  void terminate(int status);
 
   static UserProcess* create(uint8_t* code, uint32_t len);
   static UserProcess* load(uint8_t* elf_cont);
-  static void terminate_current_process();
+  static void terminate_current_process(int status);
+  // call by syscall
+  int waitpid(int child_pid, int *pstatus);
+  // call by the scheduler. Schedule the current if child has existed.
+  // return otherwise.
+  void waitchild();
   static UserProcess* current();
   static void set_current(UserProcess* cur);
   /*
@@ -51,9 +57,25 @@ class UserProcess {
   FileDesc* getFdptr(int fd) { return filetab_[fd]; }
  private:
   static UserProcess* allocate();
+  void release() {
+    memset(this, 0, sizeof(*this));
+  }
   static UserProcess* current_;
  public:
+  /*
+   * A zombie process will have allocated_ being true (so the slot is not reused
+   * by other process) and terminated_ being true.
+   *
+   * A wait system call from the parent process can release the slot.
+   */
   bool allocated_;
+  bool terminated_;
+  int exit_status_; // this is set when terminated_ is set to true.
+  int parent_pid_;  // it's -1 for processes created by kernel directly
+
+  UserProcess* wait_for_child_;
+  int* wait_for_pstatus_; // note, this is an address in user mode
+
   uint32_t pgdir_;
   InterruptFrame intr_frame_;
 

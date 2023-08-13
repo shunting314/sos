@@ -9,5 +9,6 @@ enum {
 	SC_OPEN = 6,
 	SC_READ = 7,
   SC_CLOSE = 8,
+  SC_WAITPID = 9,
   NUM_SYS_CALL,
 };
