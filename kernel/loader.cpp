@@ -14,7 +14,12 @@
 // TODO: not reentrant
 uint8_t launch_buf[BLOCK_SIZE * 10 + BLOCK_SIZE * 1024];
 
-int launch(const char* path) {
+/*
+ * If should_resume is true, the function will resume the child process right away
+ * and not return;
+ * Otherwise the function returns the child process id on success.
+ */
+int launch(const char* path, bool should_resume) {
   auto dent = SimFs::get().walkPath((char*) path);
   if (!dent) {
     printf("Path does not exist %s\n", path);
@@ -36,8 +41,10 @@ int launch(const char* path) {
     printf("Fail to create process\n");
     return -1;
   }
-  proc->resume();
-  return 0;
+  if (should_resume) {
+    proc->resume();
+  }
+  return proc->get_pid();
 }
 
 /*

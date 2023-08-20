@@ -16,6 +16,7 @@ class UserProcess {
   void resume();
   void terminate(int status);
 
+  static UserProcess* get_proc_by_id(int pid);
   static UserProcess* create(uint8_t* code, uint32_t len);
   static UserProcess* load(uint8_t* elf_cont);
   static void terminate_current_process(int status);
@@ -41,6 +42,8 @@ class UserProcess {
   int get_pid();
   UserProcess* clone(bool use_cow);
   uint32_t getPgdir() { return pgdir_; }
+
+  void set_parent_pid(int ppid) { parent_pid_ = ppid; }
 
   // The API does the following things:
   // 1. Find a free filetab_ slot

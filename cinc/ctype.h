@@ -8,3 +8,7 @@ bool isdigit(char ch) {
 bool isxdigit(char ch) {
   return isdigit(ch) || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
 }
+
+bool isspace(char ch) {
+  return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}

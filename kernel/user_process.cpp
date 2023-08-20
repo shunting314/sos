@@ -19,6 +19,11 @@ UserProcess g_process_list[N_PROCESS];
 
 UserProcess* UserProcess::current_ = nullptr;
 
+UserProcess* UserProcess::get_proc_by_id(int pid) {
+  assert(pid >= 0 && pid < N_PROCESS);
+  return g_process_list + pid;
+}
+
 int UserProcess::get_pid() {
   return this - g_process_list;
 }

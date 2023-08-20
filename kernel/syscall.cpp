@@ -25,6 +25,10 @@ int sys_fork() {
   return cowfork();
 }
 
+int sys_spawn(const char* path) {
+  return spawn(path);
+}
+
 int sys_getpid() {
   return UserProcess::current()->get_pid();
 }
@@ -64,6 +68,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
 	/* SC_READ */ (void*) sys_read,
   /* SC_CLOSE */ (void*) sys_close,
   /* SC_WAITPID */ (void*) sys_waitpid,
+  /* SC_SPAWN */ (void*) sys_spawn,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

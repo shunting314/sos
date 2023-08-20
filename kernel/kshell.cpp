@@ -218,7 +218,7 @@ int cmdLaunch(char *args[]) {
     printf("Missing path to the program\n");
     return -1;
   }
-  return launch(args[0]);
+  return launch(args[0], true);
 }
 
 int cmdLspci(char *args[]) {
@@ -308,7 +308,7 @@ void kshell() {
   // calls kshell again. Without this flag, kernel will repeatedly execute the
   // command.
   static int first_time = 1;
-  char line[1024] = "launch test_writefile";
+  char line[1024] = "launch shell";
   if (first_time) {
     first_time = 0;
     handleLine(line);

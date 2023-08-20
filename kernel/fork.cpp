@@ -9,6 +9,7 @@
  */
 
 #include <kernel/fork.h>
+#include <kernel/loader.h>
 #include <kernel/user_process.h>
 #include <kernel/paging.h>
 #include <assert.h>
@@ -34,4 +35,15 @@ int dumbfork() {
 
 int cowfork() {
   return dofork(true);
+}
+
+int spawn(const char* path) {
+  int child_pid = launch(path, false);
+
+  // need set parent process id separately
+  if (child_pid > 0) {
+    UserProcess* child_proc = UserProcess::get_proc_by_id(child_pid);
+    child_proc->set_parent_pid(UserProcess::current()->get_pid());
+  }
+  return child_pid;
 }
