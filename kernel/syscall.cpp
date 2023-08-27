@@ -2,9 +2,11 @@
 #include <kernel/user_process.h>
 #include <kernel/fork.h>
 #include <kernel/fileapi.h>
+#include <kernel/simfs.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
+#include <dirent.h>
 
 int sys_write(int fd, void *buf, int cnt) {
   return file_write(fd, buf, cnt);
@@ -45,6 +47,32 @@ int sys_close(int fd) {
   return file_close(fd);
 }
 
+// TODO dedup with ls function under kernel/simfs.cpp
+int sys_readdir(const char* path, struct dirent* entlist, int capa) {
+  auto dent = SimFs::get().walkPath(path);
+  if (!dent) {
+    printf("Path does not exist %s\n", path);
+    return -1;
+  }
+  int cnt = 0;
+  for (auto itr : dent) {
+    if (cnt >= capa) {
+      printf("dirent list out of capacity\n");
+      return -1;
+    }
+
+    DirEnt* curEnt = &(*itr);
+    struct dirent* dstEnt = entlist + cnt;
+
+    strcpy(dstEnt->name, curEnt->name);
+    dstEnt->file_size = curEnt->file_size;
+    dstEnt->ent_type = curEnt->ent_type;
+
+    ++cnt;
+  }
+  return cnt;
+}
+
 /*
  * Return the child process id on success and -1 on error.
  * Note that if the child process is not terminated yet when this function is called,
@@ -69,6 +97,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* SC_CLOSE */ (void*) sys_close,
   /* SC_WAITPID */ (void*) sys_waitpid,
   /* SC_SPAWN */ (void*) sys_spawn,
+  /* SC_READDIR */ (void*) sys_readdir,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

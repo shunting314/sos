@@ -67,3 +67,7 @@ int close(int fd) {
 int waitpid(int pid, int *pstatus, int /* options */) {
   return syscall(SC_WAITPID, pid, (int) pstatus, PHARG, PHARG, PHARG);
 }
+
+int readdir(const char*path, struct dirent* entlist, int capa) {
+  return syscall(SC_READDIR, (int) path, (int) entlist, capa, PHARG, PHARG);
+}

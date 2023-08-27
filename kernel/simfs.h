@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <dirent.h>
 
 #if USB_BOOT
 #include <kernel/usb/xhci.h>
@@ -35,14 +36,9 @@
 #define IND_BLOCK_IDX_1 (N_DIRECT_BLOCK)
 #define IND_BLOCK_IDX_2 (IND_BLOCK_IDX_1 + 1)
 
-enum DIR_ENT_TYPE {
-  ET_FILE, // regular file
-  ET_DIR, // subdirectory
-  ET_NOEXIST,
-};
-
 class DirEntIterator;
 
+// like an inode in linux.
 class DirEnt {
  public:
   explicit DirEnt() : ent_type(ET_NOEXIST) {

@@ -11,5 +11,6 @@ enum {
   SC_CLOSE = 8,
   SC_WAITPID = 9,
   SC_SPAWN = 10,
+  SC_READDIR = 11,
   NUM_SYS_CALL,
 };

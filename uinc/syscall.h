@@ -10,3 +10,6 @@ int open(const char*path, int oflags);
 int read(int fd, void *buf, int nbyte);
 int close(int fd);
 int waitpid(int pid, int *pstatus, int /* options */);
+
+struct dirent;
+int readdir(const char*path, struct dirent* entlist, int capa);
