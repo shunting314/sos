@@ -21,6 +21,7 @@ static const char* dirent_typestr(int ent_type) {
     case ET_DIR:
       return "d";
     default:
+      printf("Invalid DirEnt type %d\n", ent_type);
       assert(false && "Invalid DirEnt type");
       return nullptr;
   }

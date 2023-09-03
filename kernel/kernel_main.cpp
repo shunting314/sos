@@ -74,5 +74,7 @@ extern "C" void kernel_main() {
 #if TEST_BACKTRACE
   test_backtrace();
 #endif
+
+  SimFs::get().mkdir("/newdir");
   kshell();
 }

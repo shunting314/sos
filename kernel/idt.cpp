@@ -62,7 +62,7 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
     pfhandler(framePtr);
     assert(false && "pfhandler should not return");
   }
-  printf("Handering interrupt %d (0x%x), error code is %d (0x%x), saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->error_code, framePtr->eip);
+  printf("Handling interrupt %d (0x%x), error code is %d (0x%x), saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->error_code, framePtr->eip);
   assert(false && "Interrupt not implemented yet");
   framePtr->returnFromInterrupt();
 }

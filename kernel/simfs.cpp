@@ -311,6 +311,31 @@ DirEnt SimFs::createFile(const char* path) {
   return wpres.dirent.createFile(path, wpres.lastItemPtr - path, wpres.lastItemPtr, wpres.lastItemLen);
 }
 
+int SimFs::mkdir(const char* path) {
+  auto wpres = walkPath(path, strlen(path), true);
+  // TODO: add an option to create parent directory if not exists yet.
+  if (!wpres.dirent) {
+    return -1;
+  }
+
+  DirEnt sub = wpres.dirent.findEnt(wpres.lastItemPtr, wpres.lastItemLen);
+  if (sub) {
+    // already exist
+    if (sub.ent_type == ET_DIR) {
+      return 0;
+    } else {
+      return -1; // already exist as a non-dir
+    }
+  }
+
+  auto newent = wpres.dirent.createEnt(path, wpres.lastItemPtr - path, wpres.lastItemPtr, wpres.lastItemLen, ET_DIR);
+  if (newent) {
+    return 1;
+  } else {
+    return -1;
+  }
+}
+
 uint32_t SimFs::allocPhysBlk() {
 	assert(superBlock_.freelist != 0 && "Out of disk space");
 	int ret = superBlock_.freelist;

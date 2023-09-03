@@ -50,7 +50,7 @@ class DirEnt {
 		this->name[namelen] = '\0';
 		file_size = 0;
 		memset((void*) blktable, 0, sizeof(blktable));
-		ent_type = ent_type;
+		this->ent_type = ent_type;
   }
 
   char name[NAME_BUF_SIZE]; // 64 bytes
@@ -216,6 +216,10 @@ class SimFs {
   // otherwise, try to create the file. Return the created DirEnt if succeed and return 
   // DirEnt() if fail (e.g. if the parent directory does not exist).
 	DirEnt createFile(const char* path);
+  // return negative value on faiure.
+  // >=0 on success. Return 0 if the dir already exists; Return 1 if a
+  // new dir is created.
+  int mkdir(const char* path);
 	uint32_t allocPhysBlk();
 
   void updateRootDirEnt(const DirEnt& newent);
