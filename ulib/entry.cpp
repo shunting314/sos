@@ -9,7 +9,10 @@ entry:
   call premain
   add $4, %esp
 
-  call main
+  # maybe linker has special calling conventain for main.
+  # print &argc will show 1!
+  # Use a function named mymain resolves that.
+  call mymain
   push %eax  # exit code
   call exit
   # no need to pop since we can not reach here

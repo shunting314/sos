@@ -19,7 +19,7 @@ uint8_t launch_buf[BLOCK_SIZE * 10 + BLOCK_SIZE * 1024];
  * and not return;
  * Otherwise the function returns the child process id on success.
  */
-int launch(const char* path, bool should_resume) {
+int launch(const char* path, const char** argv, bool should_resume) {
   auto dent = SimFs::get().walkPath((char*) path);
   if (!dent) {
     printf("Path does not exist %s\n", path);
@@ -36,7 +36,7 @@ int launch(const char* path, bool should_resume) {
     SimFs::get().readBlock(phys_blkid, &launch_buf[i]);
   }
 
-  UserProcess* proc = UserProcess::load(launch_buf);
+  UserProcess* proc = UserProcess::load(launch_buf, argv);
   if (!proc) {
     printf("Fail to create process\n");
     return -1;
@@ -58,13 +58,59 @@ static void push_to_app_stack(uint32_t& app_esp, const T& entry) {
   *dst_entry = entry;
 }
 
+static void push_to_app_stack(uint32_t& app_esp, const char* src, int len) {
+  int size = ROUND_UP(len, 4);
+  app_esp -= size;
+  memmove((void*) app_esp, src, len);
+}
+
+// scratch space to copy argv from parent process. Child process will read
+// later
+char stack_scratch[4096] __attribute__((aligned(4096)));
+
+// The following static assert does not work and cause compilation error
+//   error: conversion from pointer type 'char*' to arithmetic type 'uint32_t' {aka 'unsigned int'} in a constant expression
+// static_assert((uint32_t) stack_scratch & 0xfff == 0);
+
+// copy argv from user space to the kernel scrach space
+const char** setup_kargv(int argc, const char** argv) {
+  assert(((uint32_t) stack_scratch & 0xfff) == 0);
+  uint32_t locs[64];
+  assert(argc <= 64);
+  assert(argc > 0);
+  assert(argv);
+  uint32_t esp = (uint32_t) stack_scratch + 4096;
+
+  for (int i = 0; i < argc; ++i) {
+    push_to_app_stack(esp, argv[i], strlen(argv[i]) + 1);
+    assert(esp >= (uint32_t) stack_scratch);
+    // adjust the address for the child process
+    locs[i] = esp - (uint32_t) stack_scratch + user_process_va_start - 4096;
+  }
+
+  push_to_app_stack(esp, (uint32_t) 0); // the trailing NULL
+  for (int i = argc - 1; i >= 0; --i) {
+    push_to_app_stack(esp, locs[i]);
+  }
+  assert(esp >= (uint32_t) stack_scratch);
+  return (const char**) esp;
+}
+
 /*
  * Setup AppInitState which contains initialization information kernel pass to app.
  */
-uint32_t setup_app_init_state(Elf32_Ehdr* ehdr) {
+uint32_t setup_app_init_state(Elf32_Ehdr* ehdr, int argc, const char** kargv) {
   uint8_t* elf_cont = (uint8_t*) ehdr;
   uint32_t app_esp = user_process_va_start;
   AppInitState app_init_state;
+
+  if (argc > 0) {
+    app_init_state.argc = argc;
+    assert((char*) kargv >= (char*) stack_scratch && (char*) kargv < (char*) stack_scratch + 4096);
+    int cnt = (int) stack_scratch + 4096 - (int) kargv;
+    push_to_app_stack(app_esp, (char*) kargv, cnt);
+    app_init_state.argv = (const char**) app_esp;
+  }
 
   Elf32_Shdr* shdrtable = (Elf32_Shdr*) (elf_cont + ehdr->e_shoff);
   bool found_init_array = false;
@@ -103,7 +149,7 @@ uint32_t setup_app_init_state(Elf32_Ehdr* ehdr) {
   return app_esp;
 }
 
-UserProcess* UserProcess::load(uint8_t* elf_cont) {
+UserProcess* UserProcess::load(uint8_t* elf_cont, const char** argv) {
   Elf32_Ehdr *ehdr = (Elf32_Ehdr *) elf_cont;
   if (ehdr->e_ident[0] != 0x7F ||
       ehdr->e_ident[1] != 'E' ||
@@ -121,6 +167,16 @@ UserProcess* UserProcess::load(uint8_t* elf_cont) {
   // allocate page dir
   uint32_t pgdir = alloc_phys_page();
   memmove((void*) pgdir, (void*) kernel_page_dir, 4096);
+
+  // We can not access argv after reset cr3 below.
+  int argc = 0;
+  const char** kargv = nullptr; // argv in kernel space
+  if (argv) {
+    for (; argv[argc]; ++argc) {
+    }
+    kargv = setup_kargv(argc, argv);
+  }
+
   asm_set_cr3(pgdir);
   Elf32_Phdr* phdrtable = (Elf32_Phdr*) (elf_cont + ehdr->e_phoff);
 
@@ -147,7 +203,7 @@ UserProcess* UserProcess::load(uint8_t* elf_cont) {
   proc->pgdir_ = pgdir;
   memset(&proc->intr_frame_, 0, sizeof(proc->intr_frame_));
   proc->intr_frame_.eip = ehdr->e_entry;
-  proc->intr_frame_.esp = setup_app_init_state(ehdr);
+  proc->intr_frame_.esp = setup_app_init_state(ehdr, argc, kargv);
   proc->intr_frame_.cs = USER_CODE_SEG;
   proc->intr_frame_.ss = USER_DATA_SEG;
   // enable IF

@@ -40,8 +40,8 @@ int fork() {
   return syscall(SC_FORK, PHARG, PHARG, PHARG, PHARG, PHARG);
 }
 
-int spawn(const char* path) {
-  return syscall(SC_SPAWN, (int) path, PHARG, PHARG, PHARG, PHARG);
+int spawn(const char* path, const char** argv) {
+  return syscall(SC_SPAWN, (int) path, (int) argv, PHARG, PHARG, PHARG);
 }
 
 int getpid() {

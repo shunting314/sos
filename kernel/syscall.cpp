@@ -27,8 +27,8 @@ int sys_fork() {
   return cowfork();
 }
 
-int sys_spawn(const char* path) {
-  return spawn(path);
+int sys_spawn(const char* path, const char** argv) {
+  return spawn(path, argv);
 }
 
 int sys_getpid() {

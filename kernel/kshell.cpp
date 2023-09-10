@@ -218,7 +218,7 @@ int cmdLaunch(char *args[]) {
     printf("Missing path to the program\n");
     return -1;
   }
-  return launch(args[0], true);
+  return launch(args[0], nullptr, true);
 }
 
 int cmdLspci(char *args[]) {

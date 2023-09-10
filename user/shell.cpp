@@ -47,7 +47,8 @@ void parse_line(char* line, char** words, int capacity, int& nword) {
 	}
 }
 
-int main(void) {
+extern "C" 
+int mymain(int argc, char** argv) {
   char line[512];
   char* words[64];
   int nword;
@@ -70,7 +71,7 @@ int main(void) {
 		assert(nword < sizeof(words) / sizeof(*words));
 		words[nword] = nullptr;
 
-    int child_pid = spawn(words[0]);
+    int child_pid = spawn(words[0], (const char**) words);
     if (child_pid < 0) {
       printf("Fail to spawn %s\n", words[0]);
       continue;

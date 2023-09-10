@@ -37,8 +37,8 @@ int cowfork() {
   return dofork(true);
 }
 
-int spawn(const char* path) {
-  int child_pid = launch(path, false);
+int spawn(const char* path, const char** argv) {
+  int child_pid = launch(path, argv, false);
 
   // need set parent process id separately
   if (child_pid > 0) {

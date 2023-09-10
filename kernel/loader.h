@@ -1,4 +1,4 @@
 #pragma once
 
 // return 0 on success
-int launch(const char* path, bool should_resume);
+int launch(const char* path, const char** argv, bool should_resume);

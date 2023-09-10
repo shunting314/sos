@@ -18,7 +18,7 @@ class UserProcess {
 
   static UserProcess* get_proc_by_id(int pid);
   static UserProcess* create(uint8_t* code, uint32_t len);
-  static UserProcess* load(uint8_t* elf_cont);
+  static UserProcess* load(uint8_t* elf_cont, const char** argv);
   static void terminate_current_process(int status);
   // call by syscall
   int waitpid(int child_pid, int *pstatus);
