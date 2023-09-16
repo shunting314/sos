@@ -11,6 +11,12 @@ syscall:
   push %ebp
   mov %esp, %ebp
 
+  # %eax, %ecx, %edx does not need to be saved since
+  # the caller is responsible to save them if needed
+  push %ebx
+  push %esi
+  push %edi
+
   mov 8(%ebp), %eax
   mov 12(%ebp), %ebx
   mov 16(%ebp), %ecx
@@ -18,6 +24,10 @@ syscall:
   mov 24(%ebp), %esi
   mov 28(%ebp), %edi
   int $0x30
+
+  pop %edi
+  pop %esi
+  pop %ebx
 
   mov %ebp, %esp
   pop %ebp

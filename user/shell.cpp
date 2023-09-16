@@ -47,8 +47,7 @@ void parse_line(char* line, char** words, int capacity, int& nword) {
 	}
 }
 
-extern "C" 
-int mymain(int argc, char** argv) {
+int main(int argc, char** argv) {
   char line[512];
   char* words[64];
   int nword;

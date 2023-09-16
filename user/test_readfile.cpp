@@ -4,7 +4,7 @@
 #include <assert.h>
 
 // TODO support argc/argv for kernel launch cmd
-extern "C" int mymain(void) {
+int main(void) {
   int nonexist_fd = open("/non-exist-file", O_RDONLY);
   assert(nonexist_fd < 0);
 

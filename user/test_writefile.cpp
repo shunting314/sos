@@ -2,7 +2,7 @@
 #include <fcntl.h>
 #include <syscall.h>
 
-extern "C" int mymain(void) {
+int main(void) {
   int fd = open("/newmessage", O_WRONLY);
   assert(fd >= 0);
   printf("fd is %d\n", fd);

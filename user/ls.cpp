@@ -4,7 +4,7 @@
 
 struct dirent entlist[1024];
 
-extern "C" int mymain(void) {
+int main(void) {
   printf("Enter ls\n");
 
   // TODO get the path from cmdline argument

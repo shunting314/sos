@@ -24,7 +24,7 @@ class RAIICls {
 RAIICls global_obj_first("the first global object");
 RAIICls global_obj_second("the second global object");
 
-extern "C" int mymain(void) {
+int main(void) {
   int exit_code = 12;
   printf("Enter the main function\n");
   int sum = 0;
