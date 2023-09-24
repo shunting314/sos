@@ -66,6 +66,11 @@ int main(int argc, char** argv) {
 			debug(" - %s\n", words[i]);
 		}
 
+    // empty line
+    if (nword == 0) {
+      continue;
+    }
+
     assert(nword > 0);
 		assert(nword < sizeof(words) / sizeof(*words));
 		words[nword] = nullptr;

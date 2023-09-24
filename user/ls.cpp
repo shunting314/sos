@@ -4,12 +4,20 @@
 
 struct dirent entlist[1024];
 
-int main(void) {
+int main(int argc, char **argv) {
   printf("Enter ls\n");
 
-  // TODO get the path from cmdline argument
-  int r = readdir("/", entlist, sizeof(entlist) / sizeof(entlist[0]));
-  assert(r >= 0);
+  // TODO default to current working directory instead
+  const char* path = "/";
+  if (argc >= 2) {
+    path = argv[1];
+  }
+
+  int r = readdir(path, entlist, sizeof(entlist) / sizeof(entlist[0]));
+  if (r < 0) {
+    printf("Fail to readdir for '%s'\n", path);
+    return -1;
+  }
   if (r == 0) {
     printf("Empty dir\n");
     return 0;

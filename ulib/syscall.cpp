@@ -81,3 +81,7 @@ int waitpid(int pid, int *pstatus, int /* options */) {
 int readdir(const char*path, struct dirent* entlist, int capa) {
   return syscall(SC_READDIR, (int) path, (int) entlist, capa, PHARG, PHARG);
 }
+
+int mkdir(const char* path) {
+  return syscall(SC_MKDIR, (int) path, PHARG, PHARG, PHARG, PHARG);
+}

@@ -74,6 +74,14 @@ int sys_readdir(const char* path, struct dirent* entlist, int capa) {
 }
 
 /*
+ * Create an directory using an absolute path.
+ * Only works if the parent directly already exists.
+ */
+int sys_mkdir(const char* path) {
+  return SimFs::get().mkdir(path);
+}
+
+/*
  * Return the child process id on success and -1 on error.
  * Note that if the child process is not terminated yet when this function is called,
  * we never gonna return to this call frame but the scheduler will resume the
@@ -98,6 +106,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* SC_WAITPID */ (void*) sys_waitpid,
   /* SC_SPAWN */ (void*) sys_spawn,
   /* SC_READDIR */ (void*) sys_readdir,
+  /* SC_MKDIR */ (void*) sys_mkdir,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

@@ -144,12 +144,16 @@ run: build
 	#   One flaw: after adding this option, the first keyboard input is somehow lost.
 	$(QEMU) -display curses -monitor telnet::2000,server,nowait $(img_options) -m 100 -no-reboot -no-shutdown $(USB_OPTIONS) -device e1000,netdev=id_net -netdev user,id=id_net,hostfwd=tcp::8080-:80 -object filter-dump,id=id_filter_dump,netdev=id_net,file=/tmp/dump.dat $(QEMU_EXTRA)
 
-build: out/kernel.img fs.img
 ifeq ($(USB_BOOT), 1)
+build: out/usb.img
+
+out/usb.img: out/kernel.img fs.img
 	cp out/kernel.img out/usb.img
 	truncate -s `printf "%d\n" 0x100000` out/usb.img
 	# the file system starts at 1MB offset
 	cat fs.img >> out/usb.img
+else
+build: out/kernel.img fs.img
 endif
 
 # start a connection to qemu monitor
@@ -172,6 +176,8 @@ fsimg fs.img:
 	$(MAKE) out/user/test_writefile
 	$(MAKE) out/user/ls
 	$(MAKE) out/user/echo
+	$(MAKE) out/user/mkdir
+	$(MAKE) out/user/cat
 	cp out/user/one out/fs_template
 	cp out/user/shell out/fs_template
 	cp out/user/test_fork out/fs_template
@@ -179,8 +185,10 @@ fsimg fs.img:
 	cp out/user/test_writefile out/fs_template
 	cp out/user/ls out/fs_template
 	cp out/user/echo out/fs_template
+	cp out/user/mkdir out/fs_template
+	cp out/user/cat out/fs_template
 	cp out/kernel/kernel.sym out/fs_template
-	python3.6 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
+	python3 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:
 	rm -rf out/

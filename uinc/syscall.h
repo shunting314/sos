@@ -13,3 +13,4 @@ int waitpid(int pid, int *pstatus, int /* options */);
 
 struct dirent;
 int readdir(const char*path, struct dirent* entlist, int capa);
+int mkdir(const char* path);
