@@ -7,8 +7,12 @@ struct dirent entlist[1024];
 int main(int argc, char **argv) {
   printf("Enter ls\n");
 
-  // TODO default to current working directory instead
-  const char* path = "/";
+  char cwdbuf[1024];
+  if (!getcwd(cwdbuf, sizeof(cwdbuf))) {
+    printf("Fail to read cwd\n");
+    return -1;
+  }
+  const char* path = cwdbuf;
   if (argc >= 2) {
     path = argv[1];
   }

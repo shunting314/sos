@@ -1,4 +1,5 @@
 #include <kernel/simfs.h>
+#include <kernel/user_process.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -312,28 +313,39 @@ DirEnt SimFs::createFile(const char* path) {
 }
 
 int SimFs::mkdir(const char* path) {
-  auto wpres = walkPath(path, strlen(path), true);
+  char* fullpath = normalizePath(path);
+  auto wpres = walkPath(fullpath, strlen(fullpath), true);
+  DirEnt sub, newent;
+  int r = -1;
   // TODO: add an option to create parent directory if not exists yet.
   if (!wpres.dirent) {
-    return -1;
+    r = -1;
+    goto out;
   }
 
-  DirEnt sub = wpres.dirent.findEnt(wpres.lastItemPtr, wpres.lastItemLen);
+  sub = wpres.dirent.findEnt(wpres.lastItemPtr, wpres.lastItemLen);
   if (sub) {
     // already exist
     if (sub.ent_type == ET_DIR) {
-      return 0;
+      r = 0;
+      goto out;
     } else {
-      return -1; // already exist as a non-dir
+      r = -1; // already exist as a non-dir
+      goto out;
     }
   }
 
-  auto newent = wpres.dirent.createEnt(path, wpres.lastItemPtr - path, wpres.lastItemPtr, wpres.lastItemLen, ET_DIR);
+  newent = wpres.dirent.createEnt(fullpath, wpres.lastItemPtr - fullpath, wpres.lastItemPtr, wpres.lastItemLen, ET_DIR);
   if (newent) {
-    return 1;
+    r = 1;
+    goto out;
   } else {
-    return -1;
+    r = -1;
+    goto out;
   }
+out:
+  free(fullpath);
+  return r;
 }
 
 uint32_t SimFs::allocPhysBlk() {
@@ -385,6 +397,30 @@ uint8_t* SimFs::readFile(const char* path, int* psize) {
     *psize = dent.file_size;
   }
   return buf;
+}
+
+// caller should free the returned buffer;
+char *SimFs::normalizePath(const char* path) {
+  const char* cwd = UserProcess::current()->getCwd();
+  char* fullpath = nullptr;
+  if (path[0] == '/') {
+    // absolute path
+    fullpath = strdup(path);
+  } else {
+    int cwdlen = strlen(cwd);
+    assert(cwdlen > 0);
+    int pathlen = strlen(path);
+    fullpath = (char*) malloc(cwdlen + pathlen + 2);
+    memmove(fullpath, cwd, cwdlen);
+    int off = cwdlen;
+
+    if (fullpath[off - 1] != '/') {
+      fullpath[off++] = '/';
+    }
+
+    memmove(fullpath + off, path, pathlen + 1);
+  }
+  return fullpath;
 }
 
 /*

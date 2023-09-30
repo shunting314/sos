@@ -14,6 +14,7 @@ int strcmp(const char* s, const char *t);
 int strncmp(const char* s, const char *t, int len);
 int strlen(const char *s);
 char *strcpy(char *dst, const char *src);
+char *strdup(const char* s);
 
 #ifdef __cplusplus
 }

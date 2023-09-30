@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 
 // TODO add unit test
 void *memmove(void *dst, const void *src, int n) {
@@ -83,4 +84,12 @@ char *strcpy(char *dst, const char *src) {
 		dst[i] = src[i];
 	} while (dst[i++]);
 	return dst;
+}
+
+char *strdup(const char* s) {
+  assert(s);
+  int len = strlen(s);
+  char* dst = malloc(len + 1);
+  memmove(dst, s, len + 1);
+  return dst;
 }

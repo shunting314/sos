@@ -5,6 +5,7 @@
 #include <kernel/kshell.h>
 #include <kernel/idt.h>
 #include <kernel/file_desc.h>
+#include <kernel/simfs.h>
 #include <assert.h>
 #include <string.h>
 
@@ -61,6 +62,15 @@ UserProcess* UserProcess::allocate() {
 
       g_process_list[i].wait_for_child_ = nullptr;
       g_process_list[i].wait_for_pstatus_ = nullptr;
+
+      assert(g_process_list[i].cwd_ == nullptr);
+
+      // set cwd_ to '/'. If the process is forked/spawned, it should be
+      // set to a deepcopy of parent.cwd_ later.
+      char *cwd = (char*) malloc(2);
+      cwd[0] = '/';
+      cwd[1] = '\0';
+      g_process_list[i].cwd_ = cwd;
       return &g_process_list[i];
     }
   }
@@ -231,4 +241,20 @@ void UserProcess::waitchild() {
   asm_set_cr3(pgdir_);
   *user_mode_pstatus = child_status;
   resume();
+}
+
+int UserProcess::chdir(const char* path) {
+  assert(cwd_);
+  char* newcwd = SimFs::get().normalizePath(path);
+
+  // check if cwd_ is an existing directory
+  auto dirent = SimFs::get().walkPath(newcwd);
+  if (dirent && dirent.isdir()) {
+    free(cwd_);
+    cwd_ = newcwd;
+    return 0;
+  } else {
+    free(newcwd);
+    return -1;
+  }
 }

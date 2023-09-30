@@ -85,3 +85,16 @@ int readdir(const char*path, struct dirent* entlist, int capa) {
 int mkdir(const char* path) {
   return syscall(SC_MKDIR, (int) path, PHARG, PHARG, PHARG, PHARG);
 }
+
+char* getcwd(char* path, int len) {
+  int r = syscall(SC_GETCWD, (int) path, len, PHARG, PHARG, PHARG);
+  if (r >= 0) {
+    return path;
+  } else {
+    return nullptr;
+  }
+}
+
+int chdir(const char* path) {
+  return syscall(SC_CHDIR, (int) path, PHARG, PHARG, PHARG, PHARG);
+}

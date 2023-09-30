@@ -74,8 +74,14 @@ static inline void hexdump(const uint8_t *data, int len) {
 }
 
 // memory management
+#ifdef __cplusplus
+extern "C" {
+#endif
 void* malloc(uint32_t nbytes);
 void* realloc(void* ptr, uint32_t sz);
 void free(void* ptr);
+#ifdef __cplusplus
+}
+#endif
 
 #endif

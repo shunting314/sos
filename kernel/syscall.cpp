@@ -81,6 +81,18 @@ int sys_mkdir(const char* path) {
   return SimFs::get().mkdir(path);
 }
 
+int sys_getcwd(char* path, int len) {
+  auto cur = UserProcess::current();
+  const char* cwd = cur->getCwd();
+  assert(cwd);
+  int reqlen = strlen(cwd) + 1;
+  if (len < reqlen) {
+    return -1;
+  }
+  memmove(path, cwd, reqlen);
+  return 0;
+}
+
 /*
  * Return the child process id on success and -1 on error.
  * Note that if the child process is not terminated yet when this function is called,
@@ -89,6 +101,10 @@ int sys_mkdir(const char* path) {
  */
 int sys_waitpid(int pid, int *pstatus) {
   return UserProcess::current()->waitpid(pid, pstatus);
+}
+
+int sys_chdir(const char* path) {
+  return UserProcess::current()->chdir(path);
 }
 
 void *sc_handlers[NUM_SYS_CALL] = {
@@ -107,6 +123,8 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* SC_SPAWN */ (void*) sys_spawn,
   /* SC_READDIR */ (void*) sys_readdir,
   /* SC_MKDIR */ (void*) sys_mkdir,
+  /* SC_GETCWD */ (void*) sys_getcwd,
+  /* SC_CHDIR */ (void *) sys_chdir,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

@@ -10,6 +10,7 @@ interrupt_entry_ ## no: \
   mov %ax, %es; \
   mov %ax, %fs; \
   mov %ax, %gs; \
+  xor %ebp, %ebp; \
   call interrupt_handler
 
 # push a dummy error code 0 to make the interrupt frame uniform
@@ -25,6 +26,7 @@ interrupt_entry_ ## no: \
   mov %ax, %es; \
   mov %ax, %fs; \
   mov %ax, %gs; \
+  xor %ebp, %ebp; \
   call interrupt_handler
 
 DEF_INT_NOERR(0)

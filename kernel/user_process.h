@@ -4,6 +4,7 @@
 #include <kernel/idt.h>
 #include <kernel/file_desc.h>
 #include <string.h>
+#include <stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,11 +59,34 @@ class UserProcess {
   // return true if the fd was used previously
   int releaseFd(int fd);
   FileDesc* getFdptr(int fd) { return filetab_[fd]; }
+
+  void copy_cwd_from(UserProcess* other) {
+    // 'other' most likely is the parent process.
+    assert(cwd_);
+    assert(other->cwd_);
+    free(cwd_);
+    cwd_ = strdup(other->cwd_);
+  }
+
+  const char* getCwd() const {
+    return cwd_;
+  }
+  /*
+   * Consider path as a relative path to cwd_ if it's not started with
+   * '/'.
+   *
+   * TODO: Don't support '.', '..' yet.
+   */
+  int chdir(const char* path);
+
  private:
   static UserProcess* allocate();
   void release() {
+    assert(cwd_);
+    free(cwd_);
     memset(this, 0, sizeof(*this));
   }
+
   static UserProcess* current_;
  public:
   /*
@@ -86,6 +110,7 @@ class UserProcess {
   // It's necessary so we can dupliate a opened file as the POSIX dup syscall
   // does.
   FileDesc* filetab_[MAX_OPEN_FILE] = {nullptr};
+  char* cwd_ = nullptr; // current working directory
 };
 
 extern uint32_t user_stack_start;

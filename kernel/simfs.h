@@ -205,6 +205,10 @@ class SimFs {
   // read the content of file. The caller is responsible to free the buffer.
   uint8_t* readFile(const char* path, int* psize=nullptr);
 
+  // The caller should free the returned buffer. Don't support '.', '..'
+  // yet.
+  char* normalizePath(const char* path);
+
   // return DirEnt for path
   DirEnt walkPath(const char* path);
 

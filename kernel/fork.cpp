@@ -20,6 +20,7 @@ UserProcess* UserProcess::clone(bool use_cow) {
   child->parent_pid_ = parent->get_pid();
   child->intr_frame_ = parent->intr_frame_;
   child->pgdir_ = clone_address_space(parent->pgdir_, use_cow);
+  child->copy_cwd_from(parent);
   return child;
 }
 
@@ -44,6 +45,7 @@ int spawn(const char* path, const char** argv) {
   if (child_pid > 0) {
     UserProcess* child_proc = UserProcess::get_proc_by_id(child_pid);
     child_proc->set_parent_pid(UserProcess::current()->get_pid());
+    child_proc->copy_cwd_from(UserProcess::current());
   }
   return child_pid;
 }
