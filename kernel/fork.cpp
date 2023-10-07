@@ -21,6 +21,8 @@ UserProcess* UserProcess::clone(bool use_cow) {
   child->intr_frame_ = parent->intr_frame_;
   child->pgdir_ = clone_address_space(parent->pgdir_, use_cow);
   child->copy_cwd_from(parent);
+  child->copy_filetab_from(parent);
+  child->setup_stdio();
   return child;
 }
 

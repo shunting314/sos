@@ -11,9 +11,49 @@
 #define FD_FLAG_WR 2  // open for write
 #define FD_FLAG_RW (FD_FLAG_RD | FD_FLAG_WR) // must be consistent with O_RDONLY/O_WRONLY defined in fcntl.h
 
-class FileDesc {
+// TODO: revise once we support virtual method
+enum {
+  FD_FILE,
+  FD_CONSOLE,
+};
+
+class FileDesc;
+
+class FileDescBase {
  public:
   int refcount_;
+  int fdtype_;
+
+  void decref() {
+    if (--refcount_ == 0) {
+      freeme();
+    }
+  }
+
+  // TODO: because we don't support virtual method, these methods will be
+  // manually dispatched to the corresponding child class.
+  int read(void* buf, int nbyte);
+  int write(const void* buf, int nbyte);
+  void freeme();
+};
+
+class ConsoleFileDesc : public FileDescBase {
+ public:
+  ConsoleFileDesc() {
+    refcount_ = 1;
+    fdtype_ = FD_CONSOLE;
+  }
+  int read(void *buf, int nbyte);
+  int write(const void* buf, int nbyte);
+  // don't do anything
+  void freeme() {}
+};
+
+// singleton
+ConsoleFileDesc* acquire_console_file_desc();
+
+class FileDesc : public FileDescBase {
+ public:
   char path_[MAX_PATH_SIZE];
   int off_;
   int flags_;
@@ -31,4 +71,3 @@ class FileDesc {
 };
 
 FileDesc* alloc_file_desc();
-void decref_file_desc(FileDesc* fdptr);

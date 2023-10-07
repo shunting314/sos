@@ -1,5 +1,6 @@
 #include <kernel/file_desc.h>
 #include <kernel/phys_page.h>
+#include <kernel/keyboard.h>
 #include <kernel/simfs.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,6 +41,7 @@ void decref_file_desc(FileDesc* fdptr) {
 
 // will fail if path is too long
 int FileDesc::init(const char* path, int rwflags) {
+  fdtype_ = FD_FILE;
   refcount_ = 1;
   off_ = 0;
   flags_ = rwflags;
@@ -116,5 +118,55 @@ int FileDesc::write(const void *buf, int nbyte) {
     dent.flush(path_, strlen(path_));
   }
   dent.write(off_, nbyte, buf);
+  return nbyte;
+}
+
+// TODO: hack for the missing support of virtual method
+#define FILE_DESC_DISPATCH(method, ...) \
+  switch (fdtype_) { \
+  case FD_FILE: \
+    return ((FileDesc*) this)->method(__VA_ARGS__); \
+  case FD_CONSOLE: \
+    return ((ConsoleFileDesc*) this)->method(__VA_ARGS__); \
+  default: \
+    assert(false && "invalid fdtype_"); \
+  }
+
+int FileDescBase::read(void *buf, int nbyte) {
+  FILE_DESC_DISPATCH(read, buf, nbyte);
+}
+
+int FileDescBase::write(const void* buf, int nbyte) {
+  FILE_DESC_DISPATCH(write, buf, nbyte);
+}
+
+void FileDescBase::freeme() {
+  FILE_DESC_DISPATCH(freeme);
+}
+
+ConsoleFileDesc g_console_file_desc;
+ConsoleFileDesc* acquire_console_file_desc() {
+  ++g_console_file_desc.refcount_;
+  return &g_console_file_desc;
+}
+
+int ConsoleFileDesc::read(void *buf, int nbyte) {
+  char* s = (char*) buf;
+  int cnt = 0;
+  while (cnt < nbyte) {
+    char ch = keyboardGetChar(false);
+    if (ch == -1) {
+      break;
+    }
+    s[cnt++] = ch;
+  }
+  return cnt;
+}
+
+int ConsoleFileDesc::write(const void* buf, int nbyte) {
+  char *s = (char*) buf;
+  for (int i = 0; i < nbyte; ++i) {
+    putchar(s[i]);
+  }
   return nbyte;
 }

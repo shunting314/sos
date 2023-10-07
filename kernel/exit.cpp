@@ -13,6 +13,9 @@ void UserProcess::terminate(int status) {
 
   release_pgdir(pgdir_);
 
+  // release the open file descriptors
+  releaseAllFds();
+
   // release the process struture and clear the state
   if (parent_pid_ < 0) {
     release(); // release directly since there would be no parent process waiting for this one

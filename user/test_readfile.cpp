@@ -25,7 +25,8 @@ int main(void) {
 	}
 	printf("\n");
 
-  close(fd);
+  // the file descriptor should be freed with process exit
+  // close(fd);
 
   printf("bye\n");
   return 0;

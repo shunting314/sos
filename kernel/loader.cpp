@@ -41,6 +41,12 @@ int launch(const char* path, const char** argv, bool should_resume) {
     printf("Fail to create process\n");
     return -1;
   }
+
+  if (UserProcess::current()) {
+    proc->copy_filetab_from(UserProcess::current());
+  }
+  proc->setup_stdio();
+
   if (should_resume) {
     proc->resume();
   }

@@ -138,6 +138,12 @@ void UserProcess::sched(UserProcess* cur) {
   kshell();
 }
 
+void UserProcess::releaseAllFds() {
+  for (int i = 0; i < MAX_OPEN_FILE; ++i) {
+    releaseFd(i);
+  }
+}
+
 // file descriptor related APIs. Move to a standalone file if the size for these
 // APIs grow
 
@@ -145,12 +151,12 @@ int UserProcess::releaseFd(int fd) {
   if (fd < 0 || fd >= MAX_OPEN_FILE) {
     return -1;
   }
-	FileDesc* fdptr = filetab_[fd];
+	FileDescBase* fdptr = filetab_[fd];
 	if (!fdptr) {
 		return 0;
 	}
 	filetab_[fd] = nullptr;
-	decref_file_desc(fdptr);
+	fdptr->decref();
 	return 1;
 }
 

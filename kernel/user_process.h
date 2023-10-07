@@ -58,7 +58,15 @@ class UserProcess {
 
   // return true if the fd was used previously
   int releaseFd(int fd);
-  FileDesc* getFdptr(int fd) { return filetab_[fd]; }
+  // release all fd that are still open
+  void releaseAllFds();
+  FileDescBase* getFdptr(int fd) {
+    if (!filetab_[fd]) {
+      printf("Missing fd %d\n", fd);
+    }
+    assert(filetab_[fd]);
+    return filetab_[fd];
+  }
 
   void copy_cwd_from(UserProcess* other) {
     // 'other' most likely is the parent process.
@@ -66,6 +74,25 @@ class UserProcess {
     assert(other->cwd_);
     free(cwd_);
     cwd_ = strdup(other->cwd_);
+  }
+
+  void copy_filetab_from(UserProcess* other) {
+    for (int i = 0; i < MAX_OPEN_FILE; ++i) {
+      auto* fd = other->filetab_[i];
+      if (fd) {
+        ++fd->refcount_;
+        filetab_[i] = fd;
+      }
+    }
+  }
+
+  void setup_stdio() {
+    if (!filetab_[0]) {
+      filetab_[0] = acquire_console_file_desc();
+    }
+    if (!filetab_[1]) {
+      filetab_[1] = acquire_console_file_desc();
+    }
   }
 
   const char* getCwd() const {
@@ -109,7 +136,7 @@ class UserProcess {
   // Store FileDesc* introduce one more indirection compared to storing FileDesc.
   // It's necessary so we can dupliate a opened file as the POSIX dup syscall
   // does.
-  FileDesc* filetab_[MAX_OPEN_FILE] = {nullptr};
+  FileDescBase* filetab_[MAX_OPEN_FILE] = {nullptr};
   char* cwd_ = nullptr; // current working directory
 };
 

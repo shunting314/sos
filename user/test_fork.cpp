@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <syscall.h>
 #include <assert.h>
+#include <fcntl.h>
 
 class RAIICls {
  public:
@@ -32,6 +33,8 @@ int main(void) {
     sum += i;
   }
   printf("sum from 1 to 100 is %d\n", sum);
+
+  int fd = open("/message", O_RDONLY);
   // #define USE_DUMBFORK 1
   #if USE_DUMBFORK
   int r = dumbfork();
@@ -41,6 +44,16 @@ int main(void) {
   if (r < 0) {
     printf("Fail to fork, return %d\n", r);
   } else if (r == 0) { // child process
+    // child process should inherit the fd
+    char buf[128];
+    printf("File content:\n");
+    while ((r = read(fd, buf, sizeof(buf) - 1)) != 0) {
+      assert(r > 0);
+      buf[r] = '\0';
+      printf("%s", buf);
+    }
+    printf("\n");
+
     for (int i = 0; i < 5; ++i) {
       printf("Message from child process %d [current pid is %d]\n", i, getpid());
     }
