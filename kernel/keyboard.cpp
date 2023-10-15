@@ -26,6 +26,12 @@ class KeyboardInputBuffer {
     buf[(tail++) % BUFSIZ] = ch;
   }
 
+  void putback(char ch) {
+    assert(numBuffered() < BUFSIZ);
+    assert(head > 0);
+    buf[(--head) % BUFSIZ] = ch;
+  }
+
   char getChar() {
     assert(numBuffered() > 0);
     return buf[(head++) % BUFSIZ];
@@ -62,8 +68,12 @@ char keyboardGetChar(bool blocking) {
   if (kbdBuffer.numBuffered()) {
     return kbdBuffer.getChar();
   } else {
-    return -1;
+    return 0;
   }
+}
+
+void keyboardPutback(char ch) {
+  kbdBuffer.putback(ch);
 }
 
 int keyboardReadLine(char* buf, int len) {
@@ -118,7 +128,7 @@ char shiftIt(char orig) {
 enum {
   NONE,
   SHIFT,
-  TAB_PREFIX,
+  CTRL,
 } meta_key;
 
 #define PRINT_SCAN_CODE_AND_RETURN 0
@@ -132,7 +142,6 @@ void handleKeyboard() {
   }
 #if PRINT_SCAN_CODE_AND_RETURN
   printf("Debug: get a scancode 0x%x\n", scancode);
-  return;
 #endif
 
   // special scan code
@@ -145,14 +154,18 @@ void handleKeyboard() {
   case 0x38: return; // ignore xxx
   case 0x0E: return; // TODO: support delete key
   case 0x2A: meta_key = SHIFT; return; // shift prefix
-  case 0x1d: meta_key = TAB_PREFIX; return; // a tab is encoded as a sequence of scancode 0x1d and scancode for 'i'
+  case 0x1d: meta_key = CTRL; return;
   }
 
   char ascii = scancodeToAscii[scancode];
   switch (meta_key) {
-  case TAB_PREFIX:
+  case CTRL:
+    // ctrl 'i' is interpreted as tab!
     if (ascii == 'i') {
       ascii = '\t';
+    }
+    if (ascii == 'd') {
+      ascii = KEYBOARD_CTRL_D;
     }
     break;
   case SHIFT:
@@ -175,5 +188,7 @@ void handleKeyboard() {
   }
   // printf("Got an ascii character '%c'(0x%x)\n", ascii, ascii);
   kbdBuffer.addChar(ascii);
-  putchar(ascii);
+  if (ascii > 0) {
+    putchar(ascii);
+  }
 }

@@ -118,6 +118,7 @@ int FileDesc::write(const void *buf, int nbyte) {
     dent.flush(path_, strlen(path_));
   }
   dent.write(off_, nbyte, buf);
+  off_ += nbyte;
   return nbyte;
 }
 
@@ -150,16 +151,41 @@ ConsoleFileDesc* acquire_console_file_desc() {
   return &g_console_file_desc;
 }
 
+/*
+ * TODO hacky: single character with negative value represents keep reading.
+ * Need be consistent with read function in ulib/syscall.cpp .
+ */
 int ConsoleFileDesc::read(void *buf, int nbyte) {
+  assert(nbyte > 0);
   char* s = (char*) buf;
   int cnt = 0;
   while (cnt < nbyte) {
     char ch = keyboardGetChar(false);
-    if (ch == -1) {
+    if (ch == 0) {
       break;
     }
     s[cnt++] = ch;
+    if (ch == KEYBOARD_CTRL_D) {
+      break;
+    }
   }
+
+  if (cnt == 0) {
+    // need client keep reading
+    s[0] = -1;
+    return 1;
+  }
+
+  if (cnt >= 2 && s[cnt - 1] == KEYBOARD_CTRL_D) {
+    // put back ctrl-d
+    keyboardPutback(KEYBOARD_CTRL_D);
+    return cnt - 1;
+  }
+
+  if (cnt == 1 && s[cnt - 1] == KEYBOARD_CTRL_D) {
+    return 0; // EOF
+  }
+
   return cnt;
 }
 

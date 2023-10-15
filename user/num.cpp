@@ -1,10 +1,17 @@
-// TODO make readline an API
+/*
+ * Read text from stdin, add line number to each line and write the result to
+ * stdout. Used to test io redirection.
+ *
+ * TODO make readline an API.
+ * TODO dedup code with cat
+ * TODO support width for printf
+ */
 #include <stdio.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <syscall.h>
-#include <assert.h>
 
-int main(int argc, char**argv) {
+int main(int argc, char** argv) {
   int fd = 0;
   if (argc >= 2) {
     fd = open(argv[1], O_RDONLY);
@@ -18,6 +25,7 @@ int main(int argc, char**argv) {
   char line[128];
   int lineoff = 0;
   char buf[128];
+  int lineno = 1;
   int r;
   while ((r = read(fd, buf, sizeof(buf) - 1)) != 0) {
     assert(r > 0);
@@ -33,6 +41,7 @@ int main(int argc, char**argv) {
       }
       if (lineoff == sizeof(line) - 1 || (lineoff > 0 && line[lineoff - 1] == '\n')) {
         line[lineoff] = '\0';
+        printf("%d: ", lineno++);
         printf("%s", line);
         lineoff = 0;
         continue;
@@ -43,6 +52,7 @@ int main(int argc, char**argv) {
   }
   if (lineoff > 0) {
     line[lineoff] = '\0';
+    printf("%d: ", lineno++);
     printf("%s\n", line);
   }
 
@@ -50,4 +60,5 @@ int main(int argc, char**argv) {
     close(fd);
   }
   return 0;
+
 }

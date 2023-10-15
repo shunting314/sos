@@ -68,6 +68,24 @@ class UserProcess {
     return filetab_[fd];
   }
 
+  /*
+   * Serve the similar purpose as dup syscall. But the from_fd is released
+   * in this API while dup does not do that.
+   */
+  void fdmov(int from_fd, int to_fd) {
+    // message for debug
+    // printf("fdmov from %d to %d\n", from_fd, to_fd);
+    assert(from_fd != to_fd);
+    assert(filetab_[from_fd]);
+
+    // release the old fd first
+    releaseFd(to_fd);
+    assert(!filetab_[to_fd]);
+    filetab_[to_fd] = filetab_[from_fd];
+    filetab_[from_fd] = nullptr;
+    // don't need to handle refcount!
+  }
+
   void copy_cwd_from(UserProcess* other) {
     // 'other' most likely is the parent process.
     assert(cwd_);

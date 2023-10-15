@@ -178,6 +178,7 @@ fsimg fs.img:
 	$(MAKE) out/user/echo
 	$(MAKE) out/user/mkdir
 	$(MAKE) out/user/cat
+	$(MAKE) out/user/num
 	cp out/user/one out/fs_template
 	cp out/user/shell out/fs_template
 	cp out/user/test_fork out/fs_template
@@ -187,6 +188,7 @@ fsimg fs.img:
 	cp out/user/echo out/fs_template
 	cp out/user/mkdir out/fs_template
 	cp out/user/cat out/fs_template
+	cp out/user/num out/fs_template
 	cp out/kernel/kernel.sym out/fs_template
 	python3 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 

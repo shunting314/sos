@@ -40,7 +40,7 @@ int cowfork() {
   return dofork(true);
 }
 
-int spawn(const char* path, const char** argv) {
+int spawn(const char* path, const char** argv, int fdin, int fdout) {
   int child_pid = launch(path, argv, false);
 
   // need set parent process id separately
@@ -48,6 +48,12 @@ int spawn(const char* path, const char** argv) {
     UserProcess* child_proc = UserProcess::get_proc_by_id(child_pid);
     child_proc->set_parent_pid(UserProcess::current()->get_pid());
     child_proc->copy_cwd_from(UserProcess::current());
+    if (fdin != 0) {
+      child_proc->fdmov(fdin, 0);
+    }
+    if (fdout != 1) {
+      child_proc->fdmov(fdout, 1);
+    }
   }
   return child_pid;
 }

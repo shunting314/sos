@@ -50,8 +50,8 @@ int fork() {
   return syscall(SC_FORK, PHARG, PHARG, PHARG, PHARG, PHARG);
 }
 
-int spawn(const char* path, const char** argv) {
-  return syscall(SC_SPAWN, (int) path, (int) argv, PHARG, PHARG, PHARG);
+int spawn(const char* path, const char** argv, int fdin, int fdout) {
+  return syscall(SC_SPAWN, (int) path, (int) argv, fdin, fdout, PHARG);
 }
 
 int getpid() {
@@ -63,7 +63,16 @@ int open(const char*path, int oflags) {
 }
 
 int read(int fd, void *buf, int nbyte) {
-  return syscall(SC_READ, fd, (int) buf, nbyte, PHARG, PHARG);
+  int r;
+  while (true) {
+    r = syscall(SC_READ, fd, (int) buf, nbyte, PHARG, PHARG);
+    // a hack representing keep reading for keyboard input
+    if (r == 1 && ((char*) buf)[0] < 0) {
+      continue; 
+    }
+    break;
+  }
+  return r;
 }
 
 int close(int fd) {
