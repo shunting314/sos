@@ -15,6 +15,7 @@
 enum {
   FD_FILE,
   FD_CONSOLE,
+  FD_PIPE,
 };
 
 class FileDesc;
@@ -23,6 +24,7 @@ class FileDescBase {
  public:
   int refcount_;
   int fdtype_;
+  int flags_;
 
   void decref() {
     if (--refcount_ == 0) {
@@ -56,7 +58,6 @@ class FileDesc : public FileDescBase {
  public:
   char path_[MAX_PATH_SIZE];
   int off_;
-  int flags_;
   uint8_t* blkbuf_ = nullptr;
 
   int init(const char*path, int rwflags);

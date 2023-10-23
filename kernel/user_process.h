@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 #define MAX_OPEN_FILE 64
+#define MAX_PROC_NAME 16
 
 class UserProcess {
  public:
@@ -55,6 +56,8 @@ class UserProcess {
   // If checkall is true, the API will also check slot 0/1/2 (stdin/stdout,stderr)
   // for available slots.
   int allocFd(const char* path, int rwflags, bool checkall=false);
+  // the refcount for the file descriptor has already been increased before calling.
+  int allocFd(FileDescBase* fdptr, bool checkall=false);
 
   // return true if the fd was used previously
   int releaseFd(int fd);
@@ -97,6 +100,7 @@ class UserProcess {
   void copy_filetab_from(UserProcess* other) {
     for (int i = 0; i < MAX_OPEN_FILE; ++i) {
       auto* fd = other->filetab_[i];
+
       if (fd) {
         ++fd->refcount_;
         filetab_[i] = fd;
@@ -156,6 +160,7 @@ class UserProcess {
   // does.
   FileDescBase* filetab_[MAX_OPEN_FILE] = {nullptr};
   char* cwd_ = nullptr; // current working directory
+  char name[MAX_PROC_NAME] = {0};
 };
 
 extern uint32_t user_stack_start;

@@ -114,27 +114,27 @@ void UserProcess::sched(UserProcess* cur) {
   }
   int start_idx = (UserProcess*) cur - &g_process_list[0];
   int curr_idx = start_idx;
-  int nallocated = 0;
+  int nlive = 0;
   for (int i = 0; i < N_PROCESS; ++i) {
     curr_idx = (curr_idx + 1) % N_PROCESS;
     UserProcess* next_proc = &g_process_list[curr_idx];
 
-    if (!next_proc->allocated_) {
+    // skip both free & zombie slot
+    if (!next_proc->allocated_ || next_proc->terminated_) {
       continue;
     }
-    ++nallocated;
+    ++nlive;
     if (next_proc->wait_for_child_) {
-      next_proc->waitchild(); 
-
-      // reach here if next_proc is not ready for running yet. Check the next one.
-      continue;
+      next_proc->waitchild();
+      // won't reach here if child process is already terminated and the parent
+      // process (i.e. next_proc) is resumed.
     } else {
       next_proc->resume();
     }
   }
 
   // no active processes any more, run kshell
-  assert(nallocated == 0 && "deadlock?");
+  assert(nlive == 0 && "deadlock?");
   kshell();
 }
 
@@ -160,9 +160,7 @@ int UserProcess::releaseFd(int fd) {
 	return 1;
 }
 
-// TODO: we should cache DirEnt to avoid traverse the path everytime when accessing the
-// file.
-int UserProcess::allocFd(const char* path, int rwflags, bool checkall) {
+int UserProcess::allocFd(FileDescBase* fdptr, bool checkall) {
 	int fd = -1;
 	int start_idx = checkall ? 0 : 3;
 	for (fd = start_idx; fd < MAX_OPEN_FILE && filetab_[fd]; ++fd) {
@@ -170,19 +168,35 @@ int UserProcess::allocFd(const char* path, int rwflags, bool checkall) {
 	if (fd == MAX_OPEN_FILE) {
 		return -1; // too many open file
 	}
+  
+  filetab_[fd] = fdptr;
+  return fd;
+}
+
+// TODO: we should cache DirEnt to avoid traverse the path everytime when accessing the
+// file.
+int UserProcess::allocFd(const char* path, int rwflags, bool checkall) {
 	FileDesc* fdptr = alloc_file_desc();
 	if (!fdptr) {
 		return -1; // out of file desc
 	}
-	filetab_[fd] = fdptr;
 
 	if (fdptr->init(path, rwflags) < 0) {
 		// we should release the allocated resource if failure happens
-		releaseFd(fd);
+    if (fdptr->refcount_ > 0) {
+      fdptr->decref();
+    }
 		return -1;
-	} else {
-		return fd;
 	}
+
+  int fd = allocFd(fdptr, checkall);
+  if (fd < 0) {
+    if (fdptr->refcount_ > 0) {
+      fdptr->decref();
+    }
+  }
+
+  return fd;
 }
 
 int UserProcess::waitpid(int child_pid, int *pstatus) {

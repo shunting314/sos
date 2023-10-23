@@ -41,11 +41,16 @@ int cowfork() {
 }
 
 int spawn(const char* path, const char** argv, int fdin, int fdout) {
+  // need copy the path since we can not access it after launch due to
+  // address space switching.
+  char buf[MAX_PROC_NAME] = {0};
+  strncpy(buf, path, MAX_PROC_NAME);
   int child_pid = launch(path, argv, false);
 
   // need set parent process id separately
   if (child_pid > 0) {
     UserProcess* child_proc = UserProcess::get_proc_by_id(child_pid);
+    memmove(child_proc->name, buf, MAX_PROC_NAME);
     child_proc->set_parent_pid(UserProcess::current()->get_pid());
     child_proc->copy_cwd_from(UserProcess::current());
     if (fdin != 0) {

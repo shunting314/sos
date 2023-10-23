@@ -3,6 +3,7 @@
 #include <kernel/fork.h>
 #include <kernel/fileapi.h>
 #include <kernel/simfs.h>
+#include <kernel/pipe.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
@@ -29,6 +30,10 @@ int sys_fork() {
 
 int sys_spawn(const char* path, const char** argv, int fdin, int fdout) {
   return spawn(path, argv, fdin, fdout);
+}
+
+int sys_pipe(int fds[2]) {
+  return pipe(fds);
 }
 
 int sys_getpid() {
@@ -125,6 +130,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* SC_MKDIR */ (void*) sys_mkdir,
   /* SC_GETCWD */ (void*) sys_getcwd,
   /* SC_CHDIR */ (void *) sys_chdir,
+  /* SC_PIPE */ (void *) sys_pipe,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

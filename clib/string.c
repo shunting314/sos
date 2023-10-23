@@ -86,6 +86,17 @@ char *strcpy(char *dst, const char *src) {
 	return dst;
 }
 
+char *strncpy(char* dst, const char *src, int n) {
+  int i;
+  for (i = 0; i < n && src[i]; ++i) {
+    dst[i] = src[i];
+  }
+  while (i < n) {
+    dst[i++] = '\0';
+  }
+  return dst;
+}
+
 char *strdup(const char* s) {
   assert(s);
   int len = strlen(s);

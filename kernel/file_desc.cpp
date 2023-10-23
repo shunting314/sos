@@ -2,6 +2,7 @@
 #include <kernel/phys_page.h>
 #include <kernel/keyboard.h>
 #include <kernel/simfs.h>
+#include <kernel/pipe.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -129,6 +130,8 @@ int FileDesc::write(const void *buf, int nbyte) {
     return ((FileDesc*) this)->method(__VA_ARGS__); \
   case FD_CONSOLE: \
     return ((ConsoleFileDesc*) this)->method(__VA_ARGS__); \
+  case FD_PIPE: \
+    return ((PipeFileDesc*) this)->method(__VA_ARGS__); \
   default: \
     assert(false && "invalid fdtype_"); \
   }

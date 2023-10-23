@@ -54,6 +54,10 @@ int spawn(const char* path, const char** argv, int fdin, int fdout) {
   return syscall(SC_SPAWN, (int) path, (int) argv, fdin, fdout, PHARG);
 }
 
+int pipe(int fds[2]) {
+  return syscall(SC_PIPE, (int) fds, PHARG, PHARG, PHARG, PHARG);
+}
+
 int getpid() {
   return syscall(SC_GETPID, PHARG, PHARG, PHARG, PHARG, PHARG);
 }

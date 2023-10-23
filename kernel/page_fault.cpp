@@ -48,9 +48,9 @@ void pfhandler(InterruptFrame* framePtr) {
   if (curProcess) {
     pid = curProcess->get_pid();
   }
-  printf("PFHANDLER pid %d, error code 0x%x"
+  printf("PFHANDLER pid %d (%s), error code 0x%x"
          ", eip 0x%x, cr2 0x%x\n",
-         pid, framePtr->error_code, framePtr->eip, fault_addr);
+         pid, curProcess ? curProcess->name : "N/A",  framePtr->error_code, framePtr->eip, fault_addr);
 
   // cr3 should equals to the current process's page direcotry
   phys_addr_t pgdir = curProcess->getPgdir();

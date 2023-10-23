@@ -15,5 +15,6 @@ enum {
   SC_MKDIR = 12,
   SC_GETCWD = 13,
   SC_CHDIR = 14,
+  SC_PIPE = 15,
   NUM_SYS_CALL,
 };

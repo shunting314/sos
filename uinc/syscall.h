@@ -5,6 +5,7 @@ extern "C" int exit(int status);
 int dumbfork();
 int fork(); // COW fork
 int spawn(const char* path, const char** argv, int fdin, int fdout);
+int pipe(int fds[2]);
 int getpid();
 int open(const char*path, int oflags);
 int read(int fd, void *buf, int nbyte);

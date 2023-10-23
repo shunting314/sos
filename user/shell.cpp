@@ -5,12 +5,25 @@
 #include <ctype.h>
 #include <fcntl.h>
 
+// TODO support user malloc by calling setup_malloc
+#define SUPPORT_USER_MALLOC 0
+#if SUPPORT_USER_MALLOC
+#include <vector.h>
+#endif
+
 #define DEBUG 0
 #if DEBUG
 #define debug(...) printf(__VA_ARGS__)
 #else
 #define debug(...)
 #endif
+
+#define CHECK_STATUS(status) \
+  if (status != 0) { \
+    printf("Error happens: status %d\n", status); \
+    return status; \
+  }
+
 
 /*
  * 'line' may be mutated.
@@ -164,6 +177,15 @@ int execute_command(char** words, int nword) {
   int start_pos = 0;
   int last_child = -1;
   assert(nword > 0);
+
+  #if SUPPORT_USER_MALLOC
+  vector<int> child_pid_list;
+  #else
+  #define LOCAL_BUF_SIZE 256
+  int child_pid_list[LOCAL_BUF_SIZE];
+  int child_pid_list_size = 0;
+  #endif
+
   while (start_pos < nword) {
     // find the next pipe
     int pipe_pos = start_pos;
@@ -174,8 +196,6 @@ int execute_command(char** words, int nword) {
       current_in = remaining_in;
       current_out = redirect_out;
     } else {
-      assert(false && "don't support pipe yet");
-      #if 0
       // found a pipe
       int pipe_fds[2];
       CHECK_STATUS(pipe(pipe_fds));
@@ -183,24 +203,49 @@ int execute_command(char** words, int nword) {
       current_out = pipe_fds[1];
 
       remaining_in = pipe_fds[0];
-      #endif
     }
 
     // start child process for words between [start_pos, pipe_pos)
     // with current_in/current_out as stdin/out
     words[pipe_pos] = nullptr;
     last_child = run_single_command(words + start_pos, pipe_pos - start_pos, current_in, current_out);
+    if (current_out != redirect_out) {
+      // close the write end for a pipe early so it does not get inherited by
+      // child processes created later in this loop.
+      close(current_out);
+    }
+    if (current_in != redirect_in) {
+      close(current_in);
+    }
+    if (last_child < 0) {
+      return -1;
+    }
+    #if SUPPORT_USER_MALLOC
+    child_pid_list.push_back(last_child);
+    #else
+    assert(child_pid_list_size + 1 <= LOCAL_BUF_SIZE);
+    child_pid_list[child_pid_list_size++] = last_child;
+    #endif
 
     start_pos = pipe_pos + 1;
   }
 
-  if (last_child < 0) {
-    return -1;
-  }
   int child_status;
   int rc;
-  rc = waitpid(last_child, &child_status, 0);
-  assert(rc == last_child);
+  #if SUPPORT_USER_MALLOC
+  for (auto child_pid : child_pid_list) {
+    rc = waitpid(child_pid, &child_status, 0);
+    assert(rc == child_pid);
+  }
+  child_pid_list.destruct();
+  #else
+  for (int i = 0; i < child_pid_list_size; ++i) {
+    int child_pid = child_pid_list[i];
+    rc = waitpid(child_pid, &child_status, 0);
+    assert(rc == child_pid);
+  }
+  #endif
+
   if (redirect_in != 0) {
     close(redirect_in);
   }

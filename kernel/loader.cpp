@@ -36,6 +36,9 @@ int launch(const char* path, const char** argv, bool should_resume) {
     SimFs::get().readBlock(phys_blkid, &launch_buf[i]);
   }
 
+  // Note that load will activate the child process's address space.
+  // Pointer like 'path' residing in parent process's address space may not
+  // be accessed after this point.
   UserProcess* proc = UserProcess::load(launch_buf, argv);
   if (!proc) {
     printf("Fail to create process\n");
