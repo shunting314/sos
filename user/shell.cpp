@@ -1,9 +1,23 @@
+/*
+ * Example command for Host OS:
+ *   cat ../../user/shell.cpp | awk '{print NF}' | sort | uniq -c | sort -nr
+ *
+ * Core features needed from the operation system:
+ * 1. fork & exec (or spawn)
+ * 2. dup2 syscall (or fused into spawn)
+ * 3. pipe syscall
+ */
 #include <stdio.h>
-#include <syscall.h>
 #include <assert.h>
 #include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
+#ifdef HOST_OS
+#include <unistd.h>
+#include <errno.h>
+#else
+#include <syscall.h>
+#endif
 
 // TODO support user malloc by calling setup_malloc
 #define SUPPORT_USER_MALLOC 0
@@ -18,11 +32,19 @@
 #define debug(...)
 #endif
 
+#ifdef HOST_OS
+#define CHECK_STATUS(status) \
+  if (status != 0) { \
+    printf("Error happens: status %d, errno %d, err string: %s\n", status, errno, strerror(errno)); \
+    return status; \
+  }
+#else
 #define CHECK_STATUS(status) \
   if (status != 0) { \
     printf("Error happens: status %d\n", status); \
     return status; \
   }
+#endif
 
 
 /*
@@ -110,6 +132,31 @@ builtin_fn_t* find_builtin(const char* name) {
   return nullptr;
 }
 
+#ifdef HOST_OS
+int spawn(char* prog, const char **words, int current_in, int current_out) {
+  int childpid;
+
+	childpid = fork();
+	if (childpid < 0) {
+		assert(false && "fail to fork");
+	}
+	if (childpid == 0) {
+		// in child process
+    if (current_in != 0) {
+      dup2(current_in, 0);
+      close(current_in);
+    }
+    if (current_out != 1) {
+      dup2(current_out, 1);
+      close(current_out);
+    }
+		execvp(prog, (char**) words);
+		assert(false && "fail to run exec");
+	}
+  return childpid;
+}
+#endif
+
 /*
  * Run a single command with the specified stdin and out
  */
@@ -156,11 +203,11 @@ int execute_command(char** words, int nword) {
   }
 
   if (outfile) {
-    // TODO support flags O_CREAT | O_TRUNC
-    // TODO support file permission like 0644
-    #if 0
+    #if HOST_OS
     redirect_out = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     #else
+    // TODO support flags O_CREAT | O_TRUNC
+    // TODO support file permission like 0644
     redirect_out = open(outfile, O_WRONLY);
     #endif
     if (redirect_out < 0) {
@@ -263,7 +310,11 @@ int main(int argc, char** argv) {
   printf("Enter the main function of shell\n");
   while (true) {
     printf("$ ");
+    #ifdef HOST_OS
+    if (!fgets(line, sizeof(line), stdin)) {
+    #else
     if (!fgets(line, sizeof(line), 0)) {
+    #endif
       break;
     }
     debug("Got line %s\n", line);
