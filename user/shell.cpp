@@ -206,9 +206,9 @@ int execute_command(char** words, int nword) {
     #if HOST_OS
     redirect_out = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     #else
-    // TODO support flags O_CREAT | O_TRUNC
+    // TODO support flags O_CREAT
     // TODO support file permission like 0644
-    redirect_out = open(outfile, O_WRONLY);
+    redirect_out = open(outfile, O_WRONLY | O_TRUNC);
     #endif
     if (redirect_out < 0) {
       printf("Fail to open out file '%s'\n", outfile);

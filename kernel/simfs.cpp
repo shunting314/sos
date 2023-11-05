@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define DEBUG 0
+
 DirEnt* DirEntIterator::operator*() {
   assert(entIdx_ < parentDirEnt_->nchild());
   if (!loaded_) { 
@@ -93,6 +95,20 @@ DirEnt DirEnt::createEnt(const char* path, int pathlen, const char *name, int na
 	DirEnt newent(name, namelen, ent_type);
 	write(pos, sizeof(DirEnt), &newent);
 	return newent;
+}
+
+void DirEnt::truncate() {
+  // truncate
+  int nblk = (file_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  assert(nblk < N_DIRECT_BLOCK); // TODO support indirect block
+  file_size = 0;
+  for (int lb_idx = 0; lb_idx < nblk; ++lb_idx) {
+    assert(blktable[lb_idx] > 0);
+    SimFs::get().freePhysBlk(blktable[lb_idx]);
+    blktable[lb_idx] = 0;
+  }
+
+  // caller need flush the DirEnt
 }
 
 void DirEnt::resize(int newsize) {
@@ -353,11 +369,28 @@ uint32_t SimFs::allocPhysBlk() {
 	int ret = superBlock_.freelist;
 	char buf[BLOCK_SIZE];
 
-	// TODO: only need the first 4 bytes
+	// TODO: only need read the first 4 bytes
 	readBlock(ret, (uint8_t*) buf);
 	superBlock_.freelist = *(uint32_t*) buf;
 	flushSuperBlock(); // TODO: do this lazily?
+  #if DEBUG
+  printf("Allocate phys blk %d\n", ret);
+  #endif
 	return ret;
+}
+
+void SimFs::freePhysBlk(int phys_blkid) {
+  #if DEBUG
+  printf("Free phys blk %d\n", phys_blkid);
+  #endif
+  char buf[BLOCK_SIZE];
+
+  // TODO: only need write the first 4 bytes
+  *(uint32_t*) buf = superBlock_.freelist;
+  writeBlock(phys_blkid, (uint8_t*) buf);
+
+  superBlock_.freelist = phys_blkid;
+  flushSuperBlock(); // TODO: do this lazily?
 }
 
 void SimFs::updateRootDirEnt(const DirEnt& newent) {

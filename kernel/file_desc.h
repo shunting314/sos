@@ -11,6 +11,8 @@
 #define FD_FLAG_WR 2  // open for write
 #define FD_FLAG_RW (FD_FLAG_RD | FD_FLAG_WR) // must be consistent with O_RDONLY/O_WRONLY defined in fcntl.h
 
+#define FD_FLAG_TRUNC 4
+
 // TODO: revise once we support virtual method
 enum {
   FD_FILE,

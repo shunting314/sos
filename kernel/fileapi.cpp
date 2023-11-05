@@ -21,6 +21,11 @@ int file_open(const char* path, int oflags) {
 	if (!dent) {
 		return -1; // file does not exist for read or fail to create for write
 	}
+
+  if ((oflags & FD_FLAG_TRUNC) && dent.file_size > 0) {
+    dent.truncate();
+    dent.flush(path, strlen(path));
+  }
 	int fd = UserProcess::current()->allocFd(path, rwflags);
 	return fd;
 }

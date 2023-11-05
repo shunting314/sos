@@ -53,7 +53,7 @@ class DirEnt {
 		this->ent_type = ent_type;
   }
 
-  char name[NAME_BUF_SIZE]; // 64 bytes
+  char name[NAME_BUF_SIZE]; // 64 bytes. This is the component name rather than the full path
   uint32_t file_size; // 4 bytes
   uint32_t blktable[IND_BLOCK_IDX_2 + 1]; // 12 * 4 = 48 bytes
   int8_t ent_type; // check DIR_ENT_TYPE
@@ -90,8 +90,12 @@ class DirEnt {
   void flush(const char* path, int pathlen);
   // assumes the range [pos, pos + size) is completed inside the file
 	int write(int pos, int size, const void* buf);
-  // only support growing the size for now
+  // TODO: combine the following 2 APIs to a general resize call
+  // only support growing the size for now.
+  // Let caller handle flushing since flushing requires full path of the file. We don't want to pass in the full path for this API.
 	void resize(int newsize);
+  // Let caller handle flushing since flushing requires full path of the file. We don't want to pass in the full path for this API.
+  void truncate();
 
   bool isdir() const {
     return ent_type == ET_DIR;
@@ -225,6 +229,7 @@ class SimFs {
   // new dir is created.
   int mkdir(const char* path);
 	uint32_t allocPhysBlk();
+  void freePhysBlk(int phys_blkid);
 
   void updateRootDirEnt(const DirEnt& newent);
 	void flushSuperBlock();
