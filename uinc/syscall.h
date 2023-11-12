@@ -17,3 +17,4 @@ int readdir(const char*path, struct dirent* entlist, int capa);
 int mkdir(const char* path);
 char* getcwd(char* path, int len);
 int chdir(const char* path);
+int unlink(const char* path);

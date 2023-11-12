@@ -112,6 +112,10 @@ int sys_chdir(const char* path) {
   return UserProcess::current()->chdir(path);
 }
 
+int sys_unlink(const char* path) {
+  return SimFs::get().unlink(path);
+}
+
 void *sc_handlers[NUM_SYS_CALL] = {
   nullptr, // number 0
   // "[SC_WRITE] = fptr; " seems work in C but is not supported by C++.
@@ -131,6 +135,7 @@ void *sc_handlers[NUM_SYS_CALL] = {
   /* SC_GETCWD */ (void*) sys_getcwd,
   /* SC_CHDIR */ (void *) sys_chdir,
   /* SC_PIPE */ (void *) sys_pipe,
+  /* SC_UNLINK */ (void *) sys_unlink,
 };
 
 typedef int (*sc_handler_type)(int arg1, int arg2, int arg3, int arg4, int arg5);

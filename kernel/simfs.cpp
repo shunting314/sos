@@ -78,6 +78,21 @@ int DirEnt::findEntIdx(const char* name, int len) const {
 	return -1;
 }
 
+/*
+ * TODO: current implement is very inefficient.
+ * We should move most code in FileDesc::read to DirEnt::read (not exist yet) and call this new API here.
+ * DirEnt::read should be the counterpart to DirEnt::write .
+ */
+DirEnt DirEnt::getEntByIdx(int idx) const {
+  assert(idx >= 0 && idx < nchild());
+  auto itr = begin();
+  for (int i = 0; i < idx; ++i) {
+    ++itr;
+  }
+  // TODO avoid double star?
+  return **itr;
+}
+
 // fail if the entry already exists
 DirEnt DirEnt::createEnt(const char* path, int pathlen, const char *name, int namelen, int8_t ent_type) {
 	assert(!findEnt(name, namelen));
@@ -97,17 +112,22 @@ DirEnt DirEnt::createEnt(const char* path, int pathlen, const char *name, int na
 	return newent;
 }
 
-void DirEnt::truncate() {
+void DirEnt::truncate(int newsize) {
+  assert(newsize <= file_size);
+
   // truncate
-  int nblk = (file_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  assert(nblk < N_DIRECT_BLOCK); // TODO support indirect block
-  file_size = 0;
-  for (int lb_idx = 0; lb_idx < nblk; ++lb_idx) {
+  int old_nblk = (file_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  assert(old_nblk < N_DIRECT_BLOCK); // TODO support indirect block
+
+  int new_nblk = (newsize + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+  for (int lb_idx = new_nblk; lb_idx < old_nblk; ++lb_idx) {
     assert(blktable[lb_idx] > 0);
     SimFs::get().freePhysBlk(blktable[lb_idx]);
     blktable[lb_idx] = 0;
   }
 
+  file_size = newsize;
   // caller need flush the DirEnt
 }
 
@@ -165,7 +185,7 @@ int DirEnt::write(int pos, int size, const void* buf) {
 		// whole block. no need to read the block from the disk first
     writeBlockForOff(pos, (const char*) buf);
     #else
-    // NOTE: even if we don't ready need to copy a block from buf to block_cont,
+    // NOTE: even if we don't really need to copy a block from buf to block_cont,
     // we still do that.
     // The reason is buf may be an address from user space, which does not equal
     // to the physical address. Copy the content over to the kernel buffer so
@@ -359,6 +379,62 @@ int SimFs::mkdir(const char* path) {
     r = -1;
     goto out;
   }
+out:
+  free(fullpath);
+  return r;
+}
+
+/*
+ * Path may point to either a file and an (empty!) directory.
+ * The function should truncate the dirent first and then remove it
+ * from the parent dirent.
+ */
+int SimFs::removeDirEnt(const char* path) {
+  if (strcmp(path, "/") == 0) {
+    // can not remove the root directory
+    return -1;
+  }
+  auto wpres = SimFs::get().walkPath(path, strlen(path), true);
+  assert(!wpres.pathIsRoot);
+  assert(wpres.dirent);
+
+  auto& parent_dirent = wpres.dirent;
+  int cur_idx = parent_dirent.findEntIdx(wpres.lastItemPtr, wpres.lastItemLen);
+  assert(cur_idx >= 0 && cur_idx < parent_dirent.nchild());
+
+  int last_idx = parent_dirent.nchild() - 1;
+
+  auto cur_ent = parent_dirent.getEntByIdx(cur_idx);
+  auto last_ent = parent_dirent.getEntByIdx(last_idx);
+
+  cur_ent.truncate();
+  // no need to flush cur_ent since it will be overriden right away
+
+  parent_dirent.write(cur_idx * sizeof(DirEnt), sizeof(DirEnt), &last_ent);
+  parent_dirent.truncate(parent_dirent.file_size - sizeof(DirEnt));
+
+  // flush the size change of parent_dirent
+  parent_dirent.flush(path, wpres.lastItemPtr - path);
+
+  return 0;
+}
+
+int SimFs::unlink(const char* path) {
+  char* fullpath = normalizePath(path);
+  int r = 0;
+  DirEnt ent = walkPath(path);
+  if (!ent) {
+    // file not exist
+    r = -1;
+    goto out;
+  }
+  if (ent.ent_type != ET_FILE) {
+    // require a regular file
+    r = -1;
+    goto out;
+  }
+
+  r = removeDirEnt(fullpath);
 out:
   free(fullpath);
   return r;

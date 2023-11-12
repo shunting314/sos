@@ -79,6 +79,7 @@ class DirEnt {
   DirEntIterator begin() const;
   DirEntIterator end() const;
 
+  DirEnt getEntByIdx(int idx) const;
   DirEnt findEnt(const char *name, int len) const;
 	int findEntIdx(const char *name, int len) const;
 	// the name should not contains slash and not empty
@@ -95,7 +96,7 @@ class DirEnt {
   // Let caller handle flushing since flushing requires full path of the file. We don't want to pass in the full path for this API.
 	void resize(int newsize);
   // Let caller handle flushing since flushing requires full path of the file. We don't want to pass in the full path for this API.
-  void truncate();
+  void truncate(int newsize=0);
 
   bool isdir() const {
     return ent_type == ET_DIR;
@@ -228,6 +229,9 @@ class SimFs {
   // >=0 on success. Return 0 if the dir already exists; Return 1 if a
   // new dir is created.
   int mkdir(const char* path);
+  // return negative value on failure; return 0 on success.
+  int unlink(const char* path);
+  int removeDirEnt(const char* path);
 	uint32_t allocPhysBlk();
   void freePhysBlk(int phys_blkid);
 

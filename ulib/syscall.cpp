@@ -111,3 +111,7 @@ char* getcwd(char* path, int len) {
 int chdir(const char* path) {
   return syscall(SC_CHDIR, (int) path, PHARG, PHARG, PHARG, PHARG);
 }
+
+int unlink(const char* path) {
+  return syscall(SC_UNLINK, (int) (path), PHARG, PHARG, PHARG, PHARG);
+}
