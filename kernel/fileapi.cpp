@@ -13,6 +13,12 @@ int file_open(const char* path, int oflags) {
 		return -1; // fail
 	}
 	auto dent = SimFs::get().walkPath(path);
+  // already exist and it's not a regular file
+  if (dent && dent.ent_type != ET_FILE) {
+    // for debug
+    printf("Can only open regular file but a directory found\n");
+    return -1;
+  }
   if (!dent && (oflags & FD_FLAG_WR)) {
     // try to create the file
     dent = SimFs::get().createFile(path);

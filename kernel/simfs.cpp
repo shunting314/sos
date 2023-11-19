@@ -386,7 +386,7 @@ out:
 
 /*
  * Path may point to either a file and an (empty!) directory.
- * The function should truncate the dirent first and then remove it
+ * The function should truncate the dirent (if it's a regular file) first and then remove it
  * from the parent dirent.
  */
 int SimFs::removeDirEnt(const char* path) {
@@ -407,7 +407,13 @@ int SimFs::removeDirEnt(const char* path) {
   auto cur_ent = parent_dirent.getEntByIdx(cur_idx);
   auto last_ent = parent_dirent.getEntByIdx(last_idx);
 
-  cur_ent.truncate();
+  if (cur_ent.ent_type == ET_FILE) {
+    cur_ent.truncate();
+  } else if (cur_ent.ent_type == ET_DIR) {
+    assert(cur_ent.file_size == 0 && "directory should already be empty");
+  } else {
+    assert(false && "invalid ent type");
+  }
   // no need to flush cur_ent since it will be overriden right away
 
   parent_dirent.write(cur_idx * sizeof(DirEnt), sizeof(DirEnt), &last_ent);
@@ -434,6 +440,34 @@ int SimFs::unlink(const char* path) {
     goto out;
   }
 
+  r = removeDirEnt(fullpath);
+out:
+  free(fullpath);
+  return r;
+}
+
+// remove an empty directory
+int SimFs::rmdir(const char* path) {
+  char* fullpath = normalizePath(path);
+  int r = 0;
+  DirEnt ent = walkPath(path);
+  if (!ent) {
+    // not exit
+    r = -1;
+    goto out;
+  }
+  if (ent.ent_type != ET_DIR) {
+    // require an directory
+    r = -1;
+    goto out;
+  }
+
+  if (ent.file_size != 0) {
+    // require the directory to be empty
+    r = -1;
+    goto out;
+  }
+  
   r = removeDirEnt(fullpath);
 out:
   free(fullpath);

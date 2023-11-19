@@ -210,6 +210,7 @@ class SimFs {
   // read the content of file. The caller is responsible to free the buffer.
   uint8_t* readFile(const char* path, int* psize=nullptr);
 
+  // Prepent pwd for relative path.
   // The caller should free the returned buffer. Don't support '.', '..'
   // yet.
   char* normalizePath(const char* path);
@@ -231,6 +232,8 @@ class SimFs {
   int mkdir(const char* path);
   // return negative value on failure; return 0 on success.
   int unlink(const char* path);
+  // remove an empty directory.
+  int rmdir(const char* path);
   int removeDirEnt(const char* path);
 	uint32_t allocPhysBlk();
   void freePhysBlk(int phys_blkid);

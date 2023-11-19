@@ -115,3 +115,7 @@ int chdir(const char* path) {
 int unlink(const char* path) {
   return syscall(SC_UNLINK, (int) (path), PHARG, PHARG, PHARG, PHARG);
 }
+
+int rmdir(const char* path) {
+  return syscall(SC_RMDIR, (int) (path), PHARG, PHARG, PHARG, PHARG);
+}

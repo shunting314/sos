@@ -17,5 +17,6 @@ enum {
   SC_CHDIR = 14,
   SC_PIPE = 15,
   SC_UNLINK = 16,
+  SC_RMDIR = 17,
   NUM_SYS_CALL,
 };

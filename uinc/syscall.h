@@ -18,3 +18,5 @@ int mkdir(const char* path);
 char* getcwd(char* path, int len);
 int chdir(const char* path);
 int unlink(const char* path);
+// remove an empty directory
+int rmdir(const char* path);
