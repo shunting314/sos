@@ -15,7 +15,7 @@ ULIB_SRC_S := $(wildcard ulib/*.s)
 ULIB_OBJ := $(patsubst %.cpp,%.o,$(ULIB_SRC_CPP)) $(patsubst %.s,%.o,$(ULIB_SRC_S))
 ULIB_OBJ := $(addprefix out/,$(ULIB_OBJ)) # add out/ prefix
 
-KERNEL_SRC_CPP := $(wildcard kernel/*.cpp) $(wildcard kernel/nic/*.cpp) $(wildcard kernel/net/*.cpp) $(wildcard kernel/usb/*.cpp)
+KERNEL_SRC_CPP := $(wildcard kernel/*.cpp) $(wildcard kernel/nic/*.cpp) $(wildcard kernel/net/*.cpp) $(wildcard kernel/usb/*.cpp) $(wildcard kernel/wifi/*.cpp)
 KERNEL_SRC_C := $(wildcard kernel/*.c)
 KERNEL_SRC_S := $(wildcard kernel/*.s) $(wildcard kernel/*.S)
 KERNEL_OBJ := $(patsubst %.cpp,%.o,$(KERNEL_SRC_CPP)) $(patsubst %.c,%.o,$(KERNEL_SRC_C)) $(patsubst %.s,%.o,$(KERNEL_SRC_S))

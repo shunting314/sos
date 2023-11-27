@@ -1,5 +1,6 @@
 #include <kernel/pci.h>
 #include <kernel/nic/nic.h>
+#include <kernel/wifi/wifi.h>
 #include <kernel/usb/usb.h>
 
 Port32Bit pci_addr_port(PORT_CONFIG_ADDRESS);
@@ -54,6 +55,10 @@ void lspci() {
 void collect_pci_devices() {
   ethernet_controller_pci_func = PCIFunction(); // reset
   walkpci([](const PCIFunction& func) {
+    if (func.vendor_id() == PCI_VENDOR_REALTEK && func.device_id() == PCI_DEVICE_RTL88EE) {
+      wifi_nic_pci_func = func;
+      return;
+    }
     auto _full_class_code = (FullClassCode) func.full_class_code();
     if (_full_class_code == FullClassCode::ETHERNET_CONTROLLER) {
       assert(!ethernet_controller_pci_func && "found multiple ethernet controller");

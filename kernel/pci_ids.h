@@ -6,6 +6,9 @@
 
 #define PCI_DEVICE_INTEL_PANTHER_POINT_XHCI 0x1e31
 
+#define PCI_VENDOR_REALTEK 0x10ec
+#define PCI_DEVICE_RTL88EE 0x8179
+
 /*
  * Each PCI function has 256 bytes configuration space. The first 64 bytes are
  * standadized. The remainder are available for vendor-defined purposes.

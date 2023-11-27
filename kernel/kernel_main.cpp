@@ -7,6 +7,7 @@
 #include <kernel/simfs.h>
 #include <kernel/pci.h>
 #include <kernel/nic/nic.h>
+#include <kernel/wifi/wifi.h>
 #include <kernel/init.h>
 #include <kernel/sleep.h>
 #include <kernel/pit.h>
@@ -75,5 +76,6 @@ extern "C" void kernel_main() {
   test_backtrace();
 #endif
 
+  wifi_init();
   kshell();
 }
