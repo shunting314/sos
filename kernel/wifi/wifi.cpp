@@ -3,6 +3,7 @@
 #include <kernel/phys_page.h>
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
+#include <stdlib.h>
 
 // each rx ring contains this many descriptors
 #define RTL_PCI_MAX_RX_COUNT 512
@@ -65,6 +66,18 @@ class Rtl88eeDriver {
 
   void write_nic_reg8(uint32_t off, uint8_t val) {
     *((uint8_t*) (membar_.get_addr() + off)) = val;
+  }
+
+  uint32_t read_nic_reg(uint32_t off) {
+    return *((uint32_t*) (membar_.get_addr() + off));
+  }
+
+  uint8_t read_nic_reg8(uint32_t off) {
+    return *((uint8_t*) (membar_.get_addr() + off));
+  }
+
+  uint16_t read_nic_reg16(uint32_t off) {
+    return *((uint16_t*) (membar_.get_addr() + off));
   }
 
   uint32_t* get_nic_reg_ptr(uint32_t off) {
@@ -139,6 +152,126 @@ void Rtl88eeDriver::enable_interrupt() {
   write_nic_reg(REG_HSIMR, sys_irq_mask);
 }
 
+void efuse_power_switch(Rtl88eeDriver& driver) {
+  // write EFUSE_ACCESS
+  driver.write_nic_reg8(REG_EFUSE_ACCESS, 0x69);
+
+  // read SYS_FUNC_EN
+  uint16_t sys_func_en = driver.read_nic_reg16(REG_SYS_FUNC_EN);
+  assert(sys_func_en & FEN_ELDR);
+
+  uint16_t clk = driver.read_nic_reg16(REG_SYS_CLKR);
+  assert((clk & LOADER_CLK_EN) && (clk & ANA8M));
+}
+
+// follow linux
+uint8_t read_efuse_byte(Rtl88eeDriver& driver, uint16_t offset) {
+  uint32_t value32;
+  uint8_t readbyte;
+  uint16_t retry;
+
+  driver.write_nic_reg8(REG_EFUSE_CTRL + 1, offset & 0xff);
+  readbyte = driver.read_nic_reg8(REG_EFUSE_CTRL + 2);
+  driver.write_nic_reg8(REG_EFUSE_CTRL + 2, ((offset >> 8) & 0x03) | (readbyte & 0xfc));
+  readbyte = driver.read_nic_reg8(REG_EFUSE_CTRL + 3);
+  driver.write_nic_reg8(REG_EFUSE_CTRL + 3, readbyte & 0x7f);
+
+  retry = 0;
+  value32 = driver.read_nic_reg(REG_EFUSE_CTRL);
+  while (!(value32 & 0x80000000) && (retry < 10000)) {
+    value32 = driver.read_nic_reg(REG_EFUSE_CTRL);
+    ++retry;
+  }
+  msleep(1); // TODO: 1 ms is too much. Support sleeping for microseconds
+  value32 = driver.read_nic_reg(REG_EFUSE_CTRL);
+  return value32 & 0xff;
+}
+
+// follow linux
+void read_efuse(Rtl88eeDriver& driver) {
+  uint16_t efuse_addr = 0;
+  uint32_t efuse_len = 256; // EFUSE_REAL_CONTENT_LEN
+  uint8_t ebyte = read_efuse_byte(driver, 0);
+  uint8_t offset, wren;
+  const uint16_t efuse_max_section = 64;
+  #define EFUSE_MAX_WORD_UNIT 4
+  uint16_t efuse_word[EFUSE_MAX_WORD_UNIT][efuse_max_section];
+  #define HWSET_MAX_SIZE 512
+  uint8_t efuse_tbl[HWSET_MAX_SIZE] = {0};
+  uint8_t u1temp = 0;
+
+  assert(ebyte != 0xff);
+  ++efuse_addr;
+
+  for (int i = 0; i < efuse_max_section; ++i) {
+    for (int j = 0; j < EFUSE_MAX_WORD_UNIT; ++j) {
+      efuse_word[j][i] = 0xFFFF;
+    }
+  }
+
+  while (ebyte != 0xFF && efuse_addr < efuse_len) {
+    if ((ebyte & 0x1F) == 0x0F) { /* extended header */
+      u1temp = ((ebyte & 0xE0) >> 5);
+      ebyte = read_efuse_byte(driver, efuse_addr);
+
+      if ((ebyte & 0x0F) == 0x0F) {
+        efuse_addr++;
+        ebyte = read_efuse_byte(driver, efuse_addr);
+
+        if (ebyte != 0xFF && efuse_addr < efuse_len) {
+          ++efuse_addr;
+        }
+        continue;
+      } else {
+        offset = ((ebyte & 0xF0) >> 1) | u1temp;
+        wren = (ebyte & 0x0F);
+        efuse_addr++;
+      }
+    } else {
+      offset = ((ebyte >> 4) & 0x0f);
+      wren = (ebyte & 0x0f);
+    }
+
+    if (offset < efuse_max_section) {
+      for (int i = 0; i < EFUSE_MAX_WORD_UNIT; ++i) {
+        if (!(wren & 0x01)) {
+          ebyte = read_efuse_byte(driver, efuse_addr);
+          ++efuse_addr;
+          efuse_word[i][offset] = (ebyte & 0xff);
+
+          if (efuse_addr >= efuse_len) {
+            break;
+          }
+
+          ebyte = read_efuse_byte(driver, efuse_addr);
+          ++efuse_addr;
+          efuse_word[i][offset] |= (((uint16_t) ebyte << 8) & 0xff00);
+
+          if (efuse_addr >= efuse_len) {
+            break;
+          }
+        }
+
+        wren >>= 1;
+      }
+    }
+    ebyte = read_efuse_byte(driver, efuse_addr);
+    if (ebyte != 0xff && (efuse_addr < efuse_len)) {
+      efuse_addr++;
+    }
+  }
+
+  for (int i = 0; i < efuse_max_section; ++i) {
+    for (int j = 0; j < EFUSE_MAX_WORD_UNIT; ++j) {
+      efuse_tbl[(i * 8) + (j * 2)] = (efuse_word[j][i] & 0xff);
+      efuse_tbl[(i * 8) + ((j * 2) + 1)] = ((efuse_word[j][i] >> 8) & 0xff);
+    }
+  }
+
+  // dump the first 256 bytes
+  hexdump(efuse_tbl, 256);
+}
+
 void wifi_init() {
   if (!wifi_nic_pci_func) {
     printf("No wifi nic found\n");
@@ -173,11 +306,23 @@ void wifi_init() {
 
   driver.enable_interrupt();
 
+  uint8_t reg_9346cr = driver.read_nic_reg8(REG_9346CR);
+
+  // follow linux rtl88ee_read_eeprom_info
+  {
+    assert((reg_9346cr & (1 << 4)) == 0 && "Boot from EFUSE rather than EEPROM");
+    assert(reg_9346cr & (1 << 5)); // autoload ok.
+  }
+
+  efuse_power_switch(driver); // follow linux
+  read_efuse(driver);
+
   // TODO these are debugging code that should be removed later
   int idx = 0;
   while (true) {
     printf("idx %d, own %d\n", idx++, rx_ring[driver.rxidx].own);
     dumbsleep(500);
+    break; // TODO
   }
 
   safe_assert(false && "found wifi nic");

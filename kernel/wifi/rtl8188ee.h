@@ -3,11 +3,22 @@
 /*
  * Definitions specific to rtl8188ee.
  */
+#define REG_SYS_FUNC_EN 0x0002
+#define REG_SYS_CLKR 0x0008
+#define REG_9346CR 0x000A
+#define REG_EFUSE_CTRL 0x0030
 #define REG_HSIMR 0x0058
 #define REG_HIMR 0x00B0
 #define REG_HIMRE 0x00B8
+#define REG_EFUSE_ACCESS 0x00CF
 #define REG_C2HEVT_CLEAR 0x01AF
 #define REG_PCIE_CTRL_REG 0x0300
+
+#define FEN_ELDR (1 << 12)
+
+#define ANA8M (1 << 1)
+#define LOADER_CLK_EN (1 << 5)
+
 
 // RX Ring dma address
 #define REG_RX_DESA 0x0340
@@ -20,6 +31,9 @@
 #define REG_BEQ_DESA 0x0330
 #define REG_BKQ_DESA 0x0338
 #define REG_HQ_DESA 0x0310
+
+// mac address
+#define REG_MACID 0x0610
 
 // IMR DW0
 // Power Save Time Out Interrupt
@@ -51,3 +65,5 @@
 // Host System Interrupt Mask Register
 #define HSIMR_RON_INT_EN (1 << 6)
 #define HSIMR_PDN_INT_EN (1 << 7)
+
+#define EEPROM_MAC_ADDR 0xD0

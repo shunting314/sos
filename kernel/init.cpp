@@ -44,7 +44,7 @@ void kernel_elf_init() {
   // The total buffer size needed would be around 4000 + 512 bytes.
   // The 512 bytes is for rounding to sector boundary. 4096 bytes buffer size
   // may not be enough.
-  char buf_shdrtable[4096 * 4];
+  char buf_shdrtable[4096 * 5];
   char buf_init_fn_table[4096];
 
   Elf32_Ehdr* ehdr = (Elf32_Ehdr*) load_from_elf(buf_ehdr, sizeof(buf_ehdr), 0, sizeof(Elf32_Ehdr));
