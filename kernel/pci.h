@@ -221,6 +221,7 @@ class PCIFunction {
     return read_config<uint8_t>(CONFIG_OFF_PROG_IF);
   }
 
+  // number between 0-15
   uint8_t interrupt_line() const {
     return read_config<uint8_t>(CONFIG_OFF_INTERRUPT_LINE);
   }

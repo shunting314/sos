@@ -80,6 +80,28 @@ class Rtl88eeDriver {
     return *((uint16_t*) (membar_.get_addr() + off));
   }
 
+  // read, update, write
+  void update_nic_reg8(uint32_t off, uint8_t mask, uint8_t newval) {
+    uint8_t val = read_nic_reg8(off);
+    val &= ~mask;
+    val |= (newval & mask);
+    write_nic_reg8(off, val);
+  }
+
+  void poll_nic_reg8(uint32_t off, uint8_t mask, uint8_t expected) {
+    int maxitr = 5000;
+    bool succeed = false;
+    for (int i = 0; i < maxitr; ++i) {
+      uint8_t val = read_nic_reg8(off);
+      if ((val & mask) == (expected & mask)) {
+        succeed = true;
+        break;
+      }
+      msleep(1);
+    }
+    assert(succeed && "poll_nic_reg8 fail");
+  }
+
   uint32_t* get_nic_reg_ptr(uint32_t off) {
     return (uint32_t*) (membar_.get_addr() + off);
   }
@@ -268,8 +290,28 @@ void read_efuse(Rtl88eeDriver& driver) {
     }
   }
 
-  // dump the first 256 bytes
-  hexdump(efuse_tbl, 256);
+  // print the mac address
+  printf("Mac address:");
+  for (int i = 0; i < 6; ++i) {
+    printf(" %x", efuse_tbl[EEPROM_MAC_ADDR + i]);
+  }
+  printf("\n");
+}
+
+// follow linux rtl_hal_pwrseqcmdparsing called in _rtl88ee_init_mac
+void perform_power_seq(Rtl88eeDriver& driver) {
+  // RTL8188EE_TRANS_CARDDIS_TO_CARDEMU
+  driver.update_nic_reg8(0x0005, (1 << 3) | (1 << 4), 0);
+  // RTL8188EE_TRANS_CARDEMU_TO_ACT
+  driver.poll_nic_reg8(0x0006, 1 << 1, 1 << 1);
+  driver.update_nic_reg8(0x0002, (1 << 0) | (1 << 1), 0);
+  driver.update_nic_reg8(0x0026, (1 << 7), (1 << 7));
+  driver.update_nic_reg8(0x0005, (1 << 7), 0);
+  driver.update_nic_reg8(0x0005, (1 << 4) | (1 << 3), 0);
+  driver.update_nic_reg8(0x0005, 1 << 0, 1 << 0);
+  driver.poll_nic_reg8(0x0005, 1 << 0, 0);
+  driver.update_nic_reg8(0x0023, 1 << 4, 0);
+  printf("Done performing the power sequence!\n");
 }
 
 void wifi_init() {
@@ -281,6 +323,8 @@ void wifi_init() {
   // only support RTL88EE right now.
   assert(wifi_nic_pci_func.vendor_id() == PCI_VENDOR_REALTEK);
   assert(wifi_nic_pci_func.device_id() == PCI_DEVICE_RTL88EE);
+
+  printf("RTL88EE interrupt line %d, pin %d\n", wifi_nic_pci_func.interrupt_line(), wifi_nic_pci_func.interrupt_pin());
 
   // enable bus master
   wifi_nic_pci_func.enable_bus_master();
@@ -316,6 +360,8 @@ void wifi_init() {
 
   efuse_power_switch(driver); // follow linux
   read_efuse(driver);
+
+  perform_power_seq(driver);
 
   // TODO these are debugging code that should be removed later
   int idx = 0;

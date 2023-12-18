@@ -62,6 +62,15 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
     pfhandler(framePtr);
     assert(false && "pfhandler should not return");
   }
+
+  // IRQ for rtl8188ee. Ignore for now.
+  // TODO: will this change? The IRQ number can be read from PCI configuration
+  // space.
+  if (intNum == 32 + 11) {
+    printf("Ignore RTL88EE interrupt\n");
+    framePtr->returnFromInterrupt();
+  }
+
   printf("Handling interrupt %d (0x%x), error code is %d (0x%x), saved eip 0x%x\n", intNum, intNum, framePtr->error_code, framePtr->error_code, framePtr->eip);
   assert(false && "Interrupt not implemented yet");
   framePtr->returnFromInterrupt();
