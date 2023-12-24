@@ -68,6 +68,10 @@ class Rtl88eeDriver {
     *((uint8_t*) (membar_.get_addr() + off)) = val;
   }
 
+  void write_nic_reg16(uint32_t off, uint16_t val) {
+    *((uint16_t*) (membar_.get_addr() + off)) = val;
+  }
+
   uint32_t read_nic_reg(uint32_t off) {
     return *((uint32_t*) (membar_.get_addr() + off));
   }
@@ -314,6 +318,81 @@ void perform_power_seq(Rtl88eeDriver& driver) {
   printf("Done performing the power sequence!\n");
 }
 
+// follow _rtl88ee_init_mac in linux but this function only do part of the job
+void set_trx_config(Rtl88eeDriver& driver) {
+  uint32_t transmit_config = CFENDFORM | (1 << 15);
+  uint32_t receive_config = RCR_APPFCS
+    | RCR_APP_MIC
+    | RCR_APP_ICV
+    | RCR_APP_PHYST_RXFF
+    | RCR_HTC_LOC_CTRL
+    | RCR_AMF
+    | RCR_ACF
+    | RCR_ADF
+    | RCR_AICV
+    | RCR_ACRC32
+    | RCR_AB
+    | RCR_AM
+    | RCR_APM;
+
+  driver.write_nic_reg(REG_RCR, receive_config);
+  driver.write_nic_reg16(REG_RXFLTMAP2, 0xffff);
+  driver.write_nic_reg(REG_TCR, transmit_config);
+}
+
+// follow _rtl88ee_init_mac in linux
+void init_mac(Rtl88eeDriver& driver) {
+  driver.update_nic_reg8(REG_XCK_OUT_CTRL, 1 << 0, 0);
+  driver.update_nic_reg8(REG_APS_FSMCO + 1, (1 << 7), 0);
+  driver.write_nic_reg8(REG_RSV_CTRL, 0);
+
+  perform_power_seq(driver);
+
+  driver.update_nic_reg8(REG_APS_FSMCO, (1 << 4), (1 << 4));
+  driver.update_nic_reg8(REG_PCIE_CTRL_REG + 2, 1 << 2, 1 << 2);
+  driver.update_nic_reg8(REG_WATCH_DOG + 1, 1 << 7, 1 << 7);
+  driver.update_nic_reg8(REG_AFE_XTAL_CTRL_EXT + 1, (1 << 1), (1 << 1));
+
+  driver.update_nic_reg8(REG_TX_RPT_CTRL, 3, 3); // bit 0 and 1
+  driver.write_nic_reg8(REG_TX_RPT_CTRL + 1, 2);
+  driver.write_nic_reg16(REG_TX_RPT_TIME, 0xcdf0);
+
+  driver.update_nic_reg8(REG_SYS_CLKR, 1 << 3, 1 << 3);
+  driver.update_nic_reg8(REG_GPIO_MUXCFG + 1, 1 << 4, 0);
+  driver.write_nic_reg8(0x367, 0x80);
+
+  driver.write_nic_reg16(REG_CR, 0x2ff);
+  driver.write_nic_reg8(REG_CR + 1, 0x06);
+  driver.write_nic_reg8(MSR, 0x00);
+
+  // TODO: do we need do what _rtl88ee_llt_table_init does in linux?
+
+  driver.write_nic_reg(REG_HISR, 0xffffffff);
+  driver.write_nic_reg(REG_HISRE, 0xffffffff);
+
+  uint16_t wordtmp = driver.read_nic_reg16(REG_TRXDMA_CTRL);
+  wordtmp &= 0xf;
+  wordtmp |= 0xE771;
+  driver.write_nic_reg16(REG_TRXDMA_CTRL, wordtmp);
+
+  set_trx_config(driver);
+
+  driver.write_nic_reg(REG_RX_DESA, driver.initializeRxRing());
+#define INIT_TX_RING(tx_ring) driver.initializeTxRing(tx_ring, sizeof(tx_ring) / sizeof(tx_ring[0]))
+  driver.write_nic_reg(REG_BCNQ_DESA, INIT_TX_RING(tx_ring_beacon));
+  driver.write_nic_reg(REG_MGQ_DESA, INIT_TX_RING(tx_ring_mgmt));
+  driver.write_nic_reg(REG_VOQ_DESA, INIT_TX_RING(tx_ring_voq));
+  driver.write_nic_reg(REG_VIQ_DESA, INIT_TX_RING(tx_ring_viq));
+  driver.write_nic_reg(REG_BEQ_DESA, INIT_TX_RING(tx_ring_beq));
+  driver.write_nic_reg(REG_BKQ_DESA, INIT_TX_RING(tx_ring_bkq));
+  driver.write_nic_reg(REG_HQ_DESA, INIT_TX_RING(tx_ring_hq));
+#undef INIT_TX_RING
+
+  driver.write_nic_reg(REG_INT_MIG, 0);
+  driver.write_nic_reg(REG_MCUTST_1, 0x0);
+  driver.write_nic_reg8(REG_PCIE_CTRL_REG + 1, 0); // enable RX DMA
+}
+
 void wifi_init() {
   if (!wifi_nic_pci_func) {
     printf("No wifi nic found\n");
@@ -334,20 +413,6 @@ void wifi_init() {
   map_region((phys_addr_t) kernel_page_dir, membar.get_addr(), membar.get_addr(), membar.get_size(), MAP_FLAG_WRITE);
 
   Rtl88eeDriver driver(wifi_nic_pci_func, membar);
-  driver.write_nic_reg(REG_RX_DESA, driver.initializeRxRing());
-#define INIT_TX_RING(tx_ring) driver.initializeTxRing(tx_ring, sizeof(tx_ring) / sizeof(tx_ring[0]))
-  driver.write_nic_reg(REG_BCNQ_DESA, INIT_TX_RING(tx_ring_beacon));
-  driver.write_nic_reg(REG_MGQ_DESA, INIT_TX_RING(tx_ring_mgmt));
-  driver.write_nic_reg(REG_VOQ_DESA, INIT_TX_RING(tx_ring_voq));
-  driver.write_nic_reg(REG_VIQ_DESA, INIT_TX_RING(tx_ring_viq));
-  driver.write_nic_reg(REG_BEQ_DESA, INIT_TX_RING(tx_ring_beq));
-  driver.write_nic_reg(REG_BKQ_DESA, INIT_TX_RING(tx_ring_bkq));
-  driver.write_nic_reg(REG_HQ_DESA, INIT_TX_RING(tx_ring_hq));
-#undef INIT_TX_RING
-
-  // follow linux _rtl88ee_init_mac to enable RX DMA
-  driver.write_nic_reg8(REG_PCIE_CTRL_REG + 1, 0);
-
   driver.enable_interrupt();
 
   uint8_t reg_9346cr = driver.read_nic_reg8(REG_9346CR);
@@ -361,14 +426,13 @@ void wifi_init() {
   efuse_power_switch(driver); // follow linux
   read_efuse(driver);
 
-  perform_power_seq(driver);
+  init_mac(driver);
 
   // TODO these are debugging code that should be removed later
   int idx = 0;
-  while (true) {
+  while (idx < 15) {
     printf("idx %d, own %d\n", idx++, rx_ring[driver.rxidx].own);
-    dumbsleep(500);
-    break; // TODO
+    msleep(2000);
   }
 
   safe_assert(false && "found wifi nic");
