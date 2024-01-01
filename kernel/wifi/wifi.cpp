@@ -340,6 +340,64 @@ void set_trx_config(Rtl88eeDriver& driver) {
   driver.write_nic_reg(REG_TCR, transmit_config);
 }
 
+// follow _rtl88ee_llt_write in linux
+// return false for failure
+static bool llt_write(Rtl88eeDriver& driver, uint32_t address, uint32_t data) {
+  uint32_t value = _LLT_INIT_ADDR(address) | _LLT_INIT_DATA(data) | _LLT_OP(_LLT_WRITE_ACCESS);
+  driver.write_nic_reg(REG_LLT_INIT, value);
+  for (int i = 0; i < POLLING_LLT_THRESHOLD; ++i) {
+    value = driver.read_nic_reg(REG_LLT_INIT);
+    if (_LLT_NO_ACTIVE == _LLT_OP_VALUE(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// follow _rtl88ee_llt_table_init in linux
+void llt_table_init(Rtl88eeDriver& driver) {
+  uint8_t maxpage = 0xAF;
+  uint8_t txpktbuf_bndy = 0xAB;
+  bool status;
+  driver.write_nic_reg8(REG_RQPN_NPQ, 0x01);
+  driver.write_nic_reg(REG_RQPN, 0x80730d29);
+  driver.write_nic_reg(REG_TRXFF_BNDY, (0x25FF0000 | txpktbuf_bndy));
+  driver.write_nic_reg8(REG_TDECTRL + 1, txpktbuf_bndy);
+
+  driver.write_nic_reg8(REG_TXPKTBUF_BCNQ_BDNY, txpktbuf_bndy); // the possible typo is from linux
+  driver.write_nic_reg8(REG_TXPKTBUF_MGQ_BDNY, txpktbuf_bndy);
+
+  driver.write_nic_reg8(0x45D, txpktbuf_bndy);
+  driver.write_nic_reg8(REG_PBP, 0x11);
+  driver.write_nic_reg8(REG_RX_DRVINFO_SZ, 0x4);
+
+  for (int i = 0; i < (txpktbuf_bndy - 1); i++) {
+    status = llt_write(driver, i, i + 1);
+    if (!status) {
+      goto err;
+    }
+  }
+  status = llt_write(driver, txpktbuf_bndy - 1, 0xFF);
+  if (!status) {
+    goto err;
+  }
+
+  for (int i = txpktbuf_bndy; i < maxpage; i++) {
+    status = llt_write(driver, i, i + 1);
+    if (!status) {
+      goto err;
+    }
+  }
+
+  status = llt_write(driver, maxpage, txpktbuf_bndy);
+  if (!status) {
+    goto err;
+  }
+  return;
+err:
+  assert(false && "llt_table_init fail");
+}
+
 // follow _rtl88ee_init_mac in linux
 void init_mac(Rtl88eeDriver& driver) {
   driver.update_nic_reg8(REG_XCK_OUT_CTRL, 1 << 0, 0);
@@ -365,7 +423,8 @@ void init_mac(Rtl88eeDriver& driver) {
   driver.write_nic_reg8(REG_CR + 1, 0x06);
   driver.write_nic_reg8(MSR, 0x00);
 
-  // TODO: do we need do what _rtl88ee_llt_table_init does in linux?
+  // this assumes rtlhal->mac_func_enable is false
+  llt_table_init(driver);
 
   driver.write_nic_reg(REG_HISR, 0xffffffff);
   driver.write_nic_reg(REG_HISRE, 0xffffffff);
@@ -391,6 +450,21 @@ void init_mac(Rtl88eeDriver& driver) {
   driver.write_nic_reg(REG_INT_MIG, 0);
   driver.write_nic_reg(REG_MCUTST_1, 0x0);
   driver.write_nic_reg8(REG_PCIE_CTRL_REG + 1, 0); // enable RX DMA
+}
+
+// follow rtl88ee_hw_init in linux
+void hw_init(Rtl88eeDriver& driver) {
+  uint8_t sys_clkr_p1 = driver.read_nic_reg8(REG_SYS_CLKR + 1);
+  uint8_t reg_cr = driver.read_nic_reg8(REG_CR);
+  bool mac_func_enable;
+  if ((sys_clkr_p1 & (1 << 3)) && (reg_cr != 0 && reg_cr != 0xEA)) {
+    mac_func_enable = true;
+  } else {
+    mac_func_enable = false;
+  }
+  assert(!mac_func_enable); // it's false for my 8188ee. Only support this case right now.
+  init_mac(driver);
+  assert(false && "hw_init nyi");
 }
 
 void wifi_init() {
@@ -426,7 +500,7 @@ void wifi_init() {
   efuse_power_switch(driver); // follow linux
   read_efuse(driver);
 
-  init_mac(driver);
+  hw_init(driver);
 
   // TODO these are debugging code that should be removed later
   int idx = 0;

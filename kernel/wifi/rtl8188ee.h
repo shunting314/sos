@@ -31,13 +31,19 @@
 #define REG_EFUSE_ACCESS 0x00CF
 
 #define REG_CR 0x0100
+#define REG_PBP 0x0104
 
 #define REG_TRXDMA_CTRL 0x010C
+#define REG_TRXFF_BNDY 0x0114
 
 #define REG_C2HEVT_CLEAR 0x01AF
 
 #define REG_MCUTST_1 0x01c0
+#define REG_LLT_INIT 0x01E0
 
+#define REG_RQPN 0x0200
+#define REG_TDECTRL 0x0208
+#define REG_RQPN_NPQ 0x0214
 #define REG_PCIE_CTRL_REG 0x0300
 
 #define REG_INT_MIG 0x0304
@@ -49,6 +55,7 @@
 
 #define REG_TCR 0x0604
 #define REG_RCR 0x0608
+#define REG_RX_DRVINFO_SZ 0x060F
 #define REG_RXFLTMAP2 0x06A4
 
 #define FEN_ELDR (1 << 12)
@@ -68,6 +75,9 @@
 #define REG_BEQ_DESA 0x0330
 #define REG_BKQ_DESA 0x0338
 #define REG_HQ_DESA 0x0310
+
+#define REG_TXPKTBUF_BCNQ_BDNY 0x0424
+#define REG_TXPKTBUF_MGQ_BDNY 0x0425
 
 // mac address
 #define REG_MACID 0x0610
@@ -122,3 +132,14 @@
 #define CFENDFORM (1 << 9)
 
 #define MSR (REG_CR + 2)
+
+#define _LLT_NO_ACTIVE 0x0
+#define _LLT_WRITE_ACCESS 0x1
+#define _LLT_READ_ACCESS 0x2
+
+#define _LLT_INIT_DATA(x) ((x) & 0xFF)
+#define _LLT_INIT_ADDR(x) (((x) & 0xFF) << 8)
+#define _LLT_OP(x) (((x) & 0x3) << 30)
+#define _LLT_OP_VALUE(x) (((x) >> 30) & 0x3)
+
+#define POLLING_LLT_THRESHOLD 20
