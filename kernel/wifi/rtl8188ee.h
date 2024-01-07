@@ -20,6 +20,7 @@
 #define REG_AFE_XTAL_CTRL_EXT 0x0078
 
 #define REG_XCK_OUT_CTRL 0x007c
+#define REG_MCUFWDL 0x0080
 #define REG_HIMR 0x00B0
 
 #define REG_HISR 0x00B4
@@ -143,3 +144,7 @@
 #define _LLT_OP_VALUE(x) (((x) >> 30) & 0x3)
 
 #define POLLING_LLT_THRESHOLD 20
+
+#define MCUFWDL_RDY (1 << 1)
+#define FWDL_CHKSUM_RPT (1 << 2)
+#define WINTINI_RDY (1 << 6)

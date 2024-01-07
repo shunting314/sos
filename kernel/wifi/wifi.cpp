@@ -3,7 +3,28 @@
 #include <kernel/phys_page.h>
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
+#include <kernel/simfs.h>
 #include <stdlib.h>
+
+// follow linux code rtlwifi/wifi.h
+struct rtlwifi_firmware_header {
+  uint16_t signature;
+  uint8_t category;
+  uint8_t function;
+  uint16_t version;
+  uint8_t subversion;
+  uint8_t rsvd1;
+  uint8_t month;
+  uint8_t date;
+  uint8_t hour;
+  uint8_t minute;
+  uint16_t ramcodesize;
+  uint16_t rsvd2;
+  uint32_t svnindex;
+  uint32_t rsvd3;
+  uint32_t rsvd4;
+  uint32_t rsvd5;
+};
 
 // each rx ring contains this many descriptors
 #define RTL_PCI_MAX_RX_COUNT 512
@@ -452,6 +473,80 @@ void init_mac(Rtl88eeDriver& driver) {
   driver.write_nic_reg8(REG_PCIE_CTRL_REG + 1, 0); // enable RX DMA
 }
 
+// follow _rtl88e_enable_fw_download in linux
+void enable_fw_download(Rtl88eeDriver& driver, bool enable) {
+  if (enable) {
+    driver.update_nic_reg8(REG_SYS_FUNC_EN + 1, 0x04, 0x04);
+    driver.update_nic_reg8(REG_MCUFWDL, 0x01, 0x01);
+    driver.update_nic_reg8(REG_MCUFWDL + 2, 0x08, 0); // reg & 0xf7
+  } else {
+    driver.update_nic_reg8(REG_MCUFWDL, 0x01, 0); // reg & 0xfe
+    driver.write_nic_reg8(REG_MCUFWDL + 1, 0);
+  }
+}
+
+#define START_ADDRESS 0x1000
+
+// follow _rtl88e_write_fw in linux
+void write_fw(Rtl88eeDriver& driver, uint16_t version, uint8_t *data, uint32_t size) {
+  assert(size % 4 == 0); // if size % 4 == 0 skip rtl_fill_dummy which pad the data ith 0 until the size is a multiple of 4
+
+  assert(size <= 8 * 0x1000); // at most 8 pages
+  for (int pageno = 0; pageno * 0x1000 < size; ++pageno) {
+    uint8_t *ptr = data + pageno * 0x1000;
+    int blocksize = min(0x1000, size - pageno * 0x1000);
+
+    driver.update_nic_reg8(REG_MCUFWDL + 2, 0x7, pageno);
+
+    for (int i = 0; i < blocksize; ++i) {
+      driver.write_nic_reg8(START_ADDRESS + i, ptr[i]);
+    }
+  }
+}
+
+// follow _rtl88e_fw_free_to_go in linux
+// Check if the firmware is ready to do.
+void fw_free_to_go(Rtl88eeDriver& driver) {
+  driver.poll_nic_reg8(REG_MCUFWDL, FWDL_CHKSUM_RPT, FWDL_CHKSUM_RPT);
+  driver.update_nic_reg8(REG_MCUFWDL, MCUFWDL_RDY | WINTINI_RDY, MCUFWDL_RDY);
+  { // firmware_selfreset
+    uint8_t byte = driver.read_nic_reg8(REG_SYS_FUNC_EN + 1);
+    driver.write_nic_reg8(REG_SYS_FUNC_EN + 1, byte & ~(1 << 2));
+    driver.write_nic_reg8(REG_SYS_FUNC_EN + 1, byte | (1 << 2));
+  }
+  driver.poll_nic_reg8(REG_MCUFWDL, WINTINI_RDY, WINTINI_RDY);
+}
+
+// mostly follow linux function rtl88e_download_fw in rtl8188ee/fw.c
+void download_fw(Rtl88eeDriver& driver) {
+  int firmware_size;
+  uint8_t* firmware_buf = SimFs::get().readFile("rtl8188efw.bin", &firmware_size);
+  printf("firmware size %d\n", firmware_size);
+
+  struct rtlwifi_firmware_header* pfwheader = (struct rtlwifi_firmware_header*) firmware_buf;
+  uint16_t version = pfwheader->version;
+  uint8_t subversion = pfwheader->subversion;
+  printf("version %d, subversion %d\n", version, subversion);
+
+  // check the signature
+  assert(pfwheader->signature == 0x88E1);
+
+  uint8_t* firmware_data = firmware_buf + sizeof(struct rtlwifi_firmware_header);
+  firmware_size -= sizeof(struct rtlwifi_firmware_header);
+
+  uint8_t reg_mcufwdl = driver.read_nic_reg8(REG_MCUFWDL);
+  assert((reg_mcufwdl & (1 << 7)) == 0); // no need to do selfreset
+
+  enable_fw_download(driver, true);
+  write_fw(driver, version, firmware_data, firmware_size);
+  enable_fw_download(driver, false);
+
+  fw_free_to_go(driver);
+
+  // free the buffer
+  free(firmware_buf);
+}
+
 // follow rtl88ee_hw_init in linux
 void hw_init(Rtl88eeDriver& driver) {
   uint8_t sys_clkr_p1 = driver.read_nic_reg8(REG_SYS_CLKR + 1);
@@ -464,6 +559,8 @@ void hw_init(Rtl88eeDriver& driver) {
   }
   assert(!mac_func_enable); // it's false for my 8188ee. Only support this case right now.
   init_mac(driver);
+  download_fw(driver);
+
   assert(false && "hw_init nyi");
 }
 
@@ -511,3 +608,4 @@ void wifi_init() {
 
   safe_assert(false && "found wifi nic");
 }
+

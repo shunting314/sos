@@ -19,4 +19,5 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [IEEE 802.11 - wikipedia](https://en.wikipedia.org/wiki/IEEE_802.11)
 - [802.11 Wireless Networks: the definitive guide](https://paginas.fe.up.pt/~ee05005/tese/arquivos/ieee80211.pdf)
 - [Linux firmware - gentoo wiki](https://wiki.gentoo.org/wiki/Linux_firmware)
+- [About firmware - lfs](https://www.linuxfromscratch.org/blfs/view/svn/postlfs/firmware.html): This doc mentions various firmware file can be found at: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain . I found the firmware file for rtl8188ee (https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rtlwifi/rtl8188efw.bin).
 

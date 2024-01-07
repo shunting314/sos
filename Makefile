@@ -192,6 +192,7 @@ fsimg fs.img:
 	cp out/user/num out/fs_template
 	cp out/user/rm out/fs_template
 	cp out/kernel/kernel.sym out/fs_template
+	cp rtl8188efw.bin out/fs_template
 	python3 mkfs.py out/fs_template fs.img $(MKFS_EXTRA) # python points to python2 in make's shell instance but point to python3.6 outside of make. I have to explicitly specify python3.6 for now since mkfs.py requires python3. TODO: figure out the root cause
 
 clean:
