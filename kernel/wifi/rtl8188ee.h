@@ -54,10 +54,17 @@
 
 #define REG_WATCH_DOG 0x0368
 
+#define REG_FWHW_TXQ_CTRL 0x0420
 #define REG_HWSEQ_CTRL 0x0423
+// retry limit
+#define REG_RL 0x042A
 #define REG_RRSR 0x0440
 #define REG_TX_RPT_CTRL 0x04EC
 #define REG_TX_RPT_TIME 0x04F0
+
+#define REG_BCNTCFG 0x0510
+#define REG_TBTT_PROHIBIT 0x0540
+#define REG_BCN_CTRL 0x0550
 
 #define REG_TCR 0x0604
 #define REG_RCR 0x0608
@@ -181,6 +188,8 @@
 #define RCR_ADF (1 << 11)
 #define RCR_AICV (1 << 9)
 #define RCR_ACRC32 (1 << 8)
+#define RCR_CBSSID_BCN BIT(7)
+#define RCR_CBSSID_DATA BIT(6)
 #define RCR_AB (1 << 3)
 #define RCR_AM (1 << 2)
 #define RCR_APM (1 << 1)
@@ -254,3 +263,17 @@
 #define BLSSIREADADDRESS 0x7f800000
 #define BLSSIREADEDGE 0x80000000
 #define BLSSIREADBACKDATA 0xfffff
+
+#define DM_REG_ANTSEL_PIN_11N 0x4C
+#define DM_REG_PIN_CTRL_11N 0x870
+#define DM_REG_RX_ANT_CTRL_11N 0x864
+#define DM_REG_LNA_SWITCH_11N 0xB2C
+#define DM_REG_ANTDIV_PARA1_11N 0xCA4
+#define DM_REG_BB_PWR_SAV4_11N 0xA74
+#define DM_REG_CCK_ANTDIV_PARA2_11N 0xA0C
+#define DM_REG_ANT_MAPPING1_11N 0x914
+
+#define MSR_NOLINK 0x00
+
+#define RETRY_LIMIT_SHORT_SHIFT 8
+#define RETRY_LIMIT_LONG_SHIFT 0

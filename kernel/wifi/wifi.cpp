@@ -6,6 +6,8 @@
 #include <kernel/simfs.h>
 #include <stdlib.h>
 
+#define MAIN_ANT 0
+
 #define RFREG_OFFSET_MASK 0xfffff
 #define MASKDWORD 0xffffffff
 #define MASK12BITS 0xfff
@@ -204,6 +206,7 @@ class Rtl88eeDriver {
   uint32_t iqk_mac_backup[IQK_MAC_REG_NUM];
   uint32_t iqk_bb_backup[IQK_BB_REG_NUM];
   uint8_t rfpi_enable;
+  uint8_t reg_bcn_ctrl_val = 0;
  private:
   PCIFunction func_;
   Bar membar_;
@@ -1410,9 +1413,109 @@ void phy_lc_calibrate(Rtl88eeDriver& driver) {
   }
 }
 
+// follow rtl88e_dm_update_rx_idle_ant in linux
+void dm_update_rx_idle_ant(Rtl88eeDriver& driver, uint8_t ant) {
+  assert(ant == MAIN_ANT);
+  // skip since pfat_table->rx_idle_ant should already be MAIN_ANT
+}
+
+// follow rtl88e_dm_antenna_div_init in linux
+void dm_antenna_div_init(Rtl88eeDriver& driver) {
+  assert(driver.antenna_div_type == CGCS_RX_HW_ANTDIV);
+
+  // follow rtl88e_dm_rx_hw_antena_div_init in linux
+
+  // MAC Setting
+  uint32_t value32 = rtl_get_bbreg(driver, DM_REG_ANTSEL_PIN_11N, MASKDWORD);
+  rtl_set_bbreg(driver, DM_REG_ANTSEL_PIN_11N, MASKDWORD, value32 | (BIT(23) | BIT(25)));
+  // Pin Setting
+  rtl_set_bbreg(driver, DM_REG_PIN_CTRL_11N, BIT(9) | BIT(8), 0);
+  rtl_set_bbreg(driver, DM_REG_RX_ANT_CTRL_11N, BIT(10), 0);
+  rtl_set_bbreg(driver, DM_REG_LNA_SWITCH_11N, BIT(22), 1);
+  rtl_set_bbreg(driver, DM_REG_LNA_SWITCH_11N, BIT(31), 1);
+
+  // OFDM setting
+  rtl_set_bbreg(driver, DM_REG_ANTDIV_PARA1_11N, MASKDWORD, 0xa0);
+
+  // CCK setting
+  rtl_set_bbreg(driver, DM_REG_BB_PWR_SAV4_11N, BIT(7), 1);
+  rtl_set_bbreg(driver, DM_REG_CCK_ANTDIV_PARA2_11N, BIT(4), 1);
+  dm_update_rx_idle_ant(driver, MAIN_ANT);
+  rtl_set_bbreg(driver, DM_REG_ANT_MAPPING1_11N, MASKLWORD, 0x0201);
+}
+
 // follow rtl88e_dm_init in linux
 void dm_init(Rtl88eeDriver& driver) {
-  assert(false); // TODO HERE
+  // XXX skip other work in this function since they don't change hardware registers
+  dm_antenna_div_init(driver);
+}
+
+// follow _rtl88ee_stop_tx_beacon in linux
+void stop_tx_beacon(Rtl88eeDriver& driver) {
+  uint8_t tmp1byte = driver.read_nic_reg8(REG_FWHW_TXQ_CTRL + 2);
+  driver.write_nic_reg8(REG_FWHW_TXQ_CTRL + 2, tmp1byte & (~BIT(6)));
+  driver.write_nic_reg8(REG_TBTT_PROHIBIT + 1, 0x64);
+  tmp1byte = driver.read_nic_reg8(REG_TBTT_PROHIBIT + 2);
+  tmp1byte &= ~(BIT(0));
+  driver.write_nic_reg8(REG_TBTT_PROHIBIT + 2, tmp1byte);
+}
+
+// follow _rtl88ee_set_bcn_ctrl_reg in linux
+void set_bcn_ctrl_reg(Rtl88eeDriver& driver, uint8_t set_bits, uint8_t clear_bits) {
+  // XXX should reg_bcn_ctrl_val be BIT(3) set by rtl88ee_set_beacon_related_registers ?
+  driver.reg_bcn_ctrl_val |= set_bits;
+  driver.reg_bcn_ctrl_val &= ~clear_bits;
+  driver.write_nic_reg8(REG_BCN_CTRL, driver.reg_bcn_ctrl_val);
+}
+
+// follow _rtl88ee_enable_bcn_sub_func in linux
+void enable_bcn_sub_func(Rtl88eeDriver& driver) {
+  set_bcn_ctrl_reg(driver, 0, BIT(1));
+}
+
+// follow rtl88ee_set_check_bssid in linux
+void set_check_bssid(Rtl88eeDriver& driver, bool check_bssid) {
+  assert(!check_bssid);
+  uint32_t reg_rcr = driver.receive_config;
+
+  reg_rcr &= (~(RCR_CBSSID_DATA | RCR_CBSSID_BCN));
+  set_bcn_ctrl_reg(driver, BIT(4), 0);
+
+  // set_hw_reg HW_VAR_RCR
+  driver.write_nic_reg(REG_RCR, reg_rcr);
+  driver.receive_config = reg_rcr;
+}
+
+// follow rtl_op_add_interface in linux
+void rtl_op_add_interface(Rtl88eeDriver& driver) {
+  // XXX assumes interface type is STATION
+  // XXX assumes beacon_enabled is 0
+  // XXX skip rtl_ips_nic_on for now.
+
+  {
+    // follow rtl88ee_set_network_type in linux
+
+    { // follow _rtl88ee_set_media_status
+      // XXX skip led for now
+      // XXX assume link_state < MAC80211_LINKED
+      uint8_t mode = MSR_NOLINK;
+      uint8_t bt_msr = driver.read_nic_reg8(MSR) & 0xfc;
+      stop_tx_beacon(driver);
+      enable_bcn_sub_func(driver);
+      driver.write_nic_reg8(MSR, bt_msr | mode);
+      driver.write_nic_reg8(REG_BCNTCFG + 1, 0x66);
+    }
+
+    set_check_bssid(driver, false);
+  }
+  // set mac addr
+  for (int i = 0; i < ETH_ALEN; ++i) {
+    driver.write_nic_reg8((REG_MACID + i), driver.mac_addr[i]);
+  }
+
+  // set retry limit
+  uint8_t retry_limit = 0x30;
+  driver.write_nic_reg16(REG_RL, (retry_limit << RETRY_LIMIT_SHORT_SHIFT) | (retry_limit << RETRY_LIMIT_LONG_SHIFT));
 }
 
 // follow rtl88ee_hw_init in linux
@@ -1512,6 +1615,8 @@ void wifi_init() {
 
   hw_init(driver);
   driver.hal_state = true;
+
+  rtl_op_add_interface(driver);
 
   // TODO these are debugging code that should be removed later
   int idx = 0;
