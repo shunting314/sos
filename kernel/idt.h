@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 void setup_idt();
+void register_irq_handler(int idx, void *handler);
 
 // TODO: make use of these definitions rather than use magical numbers in assembly
 #define KERNEL_CODE_SEG 8

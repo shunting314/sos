@@ -4,8 +4,10 @@
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
 #include <kernel/simfs.h>
+#include <kernel/idt.h>
 #include <stdlib.h>
 
+#define AC_MAX 4
 #define MAIN_ANT 0
 
 #define RFREG_OFFSET_MASK 0xfffff
@@ -207,6 +209,13 @@ class Rtl88eeDriver {
   uint32_t iqk_bb_backup[IQK_BB_REG_NUM];
   uint8_t rfpi_enable;
   uint8_t reg_bcn_ctrl_val = 0;
+
+  uint32_t irq_mask[2];
+  uint8_t current_channel;
+  uint8_t sw_chnl_stage;
+  uint8_t sw_chnl_step;
+  int num_total_rfpath = 0;
+  uint32_t rfreg_chnlval[2];
  private:
   PCIFunction func_;
   Bar membar_;
@@ -245,7 +254,7 @@ uint32_t Rtl88eeDriver::initializeTxRing(TxDesc* ring, int size) {
 }
 
 void Rtl88eeDriver::enable_interrupt() {
-  uint32_t irq_mask_0 = (
+  irq_mask[0] = (
     IMR_PSTIMEOUT |
     IMR_HSISR_IND_ON_INT |
     IMR_C2HCMD |
@@ -259,11 +268,11 @@ void Rtl88eeDriver::enable_interrupt() {
     IMR_ROK |
     0
   );
-  uint32_t irq_mask_1 = IMR_RXFOVW;
+  irq_mask[1] = IMR_RXFOVW;
   uint32_t sys_irq_mask = (HSIMR_RON_INT_EN | HSIMR_PDN_INT_EN);
 
-  write_nic_reg(REG_HIMR, irq_mask_0);
-  write_nic_reg(REG_HIMRE, irq_mask_1);
+  write_nic_reg(REG_HIMR, irq_mask[0]);
+  write_nic_reg(REG_HIMRE, irq_mask[1]);
   write_nic_reg8(REG_C2HEVT_CLEAR, 0);
   // enable system interrupt
   write_nic_reg(REG_HSIMR, sys_irq_mask);
@@ -862,8 +871,8 @@ void phy_rf_config(Rtl88eeDriver& driver) {
   // assume rf_type is RF_1T1R as set in _rtl88ee_read_chip_version
 
   // follow _rtl88e_phy_rf6052_config_parafile
-  uint32_t num_total_rfpath = 1;
-  for (int rfpath = 0; rfpath < num_total_rfpath; ++rfpath) {
+  driver.num_total_rfpath = 1;
+  for (int rfpath = 0; rfpath < driver.num_total_rfpath; ++rfpath) {
     assert(rfpath == RF90_PATH_A);
 
     // XXX the code below assumes rfpath is RF90_PATH_A. Other rfpath need access different registers
@@ -1578,6 +1587,252 @@ void hw_init(Rtl88eeDriver& driver) {
   }
   driver.write_nic_reg8(REG_NAV_CTRL + 2, ((30000 + 127) / 128));
   dm_init(driver);
+
+  driver.rfreg_chnlval[0] = rtl_get_rfreg(driver, (enum radio_path) 0, RF_CHNLBW, RFREG_OFFSET_MASK);
+  driver.rfreg_chnlval[0] = driver.rfreg_chnlval[0] & 0xfff00fff;
+}
+
+Rtl88eeDriver* driver_ptr = nullptr;
+
+void wifi_irq_handler(void) {
+  assert(driver_ptr);
+  Rtl88eeDriver& driver = *driver_ptr;
+  uint32_t inta = driver.read_nic_reg(ISR) & driver.irq_mask[0];
+  driver.write_nic_reg(ISR, inta);
+
+  uint32_t intb = driver.read_nic_reg(REG_HISRE) & driver.irq_mask[1];
+  driver.write_nic_reg(REG_HISRE, intb);
+
+  printf("inta 0x%x, intb 0x%x\n", inta, intb);
+}
+
+#define MAX_PRECMD_CNT 16
+#define MAX_RFDEPENDCMD_CNT 16
+#define MAX_POSTCMD_CNT 16
+
+enum swchnlcmd_id {
+  CMDID_END,
+  CMDID_SET_TXPOWEROWNER_LEVEL,
+  CMDID_BBREGWRITE10,
+  CMDID_WRITEPORT_ULONG,
+  CMDID_WRITEPORT_USHORT,
+  CMDID_WRITEPORT_UCHAR,
+  CMDID_RF_WRITEREG,
+};
+
+struct swchnlcmd {
+  enum swchnlcmd_id cmdid;
+  uint32_t para1;
+  uint32_t para2;
+  uint32_t msdelay;
+};
+
+// follow _rtl88e_phy_set_sw_chnl_cmdarray in linux
+static void phy_set_sw_chnl_cmdarray(struct swchnlcmd *cmdtable, uint32_t cmdtableidx, uint32_t cmdtablesz, enum swchnlcmd_id cmdid, uint32_t para1, uint32_t para2, uint32_t msdelay) {
+  struct swchnlcmd *pcmd;
+  assert(cmdtable);
+  assert(cmdtableidx < cmdtablesz);
+  pcmd = cmdtable + cmdtableidx;
+  pcmd->cmdid = cmdid;
+  pcmd->para1 = para1;
+  pcmd->para2 = para2;
+  pcmd->msdelay = msdelay;
+}
+
+// follow rtl88e_phy_set_txpower_level in linux
+void phy_set_txpower_level(Rtl88eeDriver& driver, uint8_t channel) {
+  // TODO NYI
+  printf("phy_set_txpower_level not implemented yet\n"); // TODO
+}
+
+// follow _rtl88e_phy_sw_chnl_step_by_step in linux
+bool phy_sw_chnl_step_by_step(Rtl88eeDriver& driver, uint8_t channel, uint8_t* stage, uint8_t* step, uint32_t* delay) {
+  struct swchnlcmd precommandcmd[MAX_PRECMD_CNT];
+  uint32_t precommandcmdcnt;
+  struct swchnlcmd postcommandcmd[MAX_POSTCMD_CNT];
+  uint32_t postcommandcmdcnt;
+  struct swchnlcmd rfdependcmd[MAX_RFDEPENDCMD_CNT];
+  uint32_t rfdependcmdcnt;
+  struct swchnlcmd* currentcmd = nullptr;
+  uint8_t rfpath;
+
+  precommandcmdcnt = 0;
+  phy_set_sw_chnl_cmdarray(precommandcmd, precommandcmdcnt++, MAX_PRECMD_CNT, CMDID_SET_TXPOWEROWNER_LEVEL, 0, 0, 0);
+  phy_set_sw_chnl_cmdarray(precommandcmd, precommandcmdcnt++, MAX_PRECMD_CNT, CMDID_END, 0, 0, 0);
+
+  postcommandcmdcnt = 0;
+  phy_set_sw_chnl_cmdarray(postcommandcmd, postcommandcmdcnt++, MAX_POSTCMD_CNT, CMDID_END, 0, 0, 0);
+
+  rfdependcmdcnt = 0;
+  assert(channel >= 1 && channel <= 13);
+
+  phy_set_sw_chnl_cmdarray(rfdependcmd, rfdependcmdcnt++, MAX_RFDEPENDCMD_CNT, CMDID_RF_WRITEREG, RF_CHNLBW, channel, 10);
+  phy_set_sw_chnl_cmdarray(rfdependcmd, rfdependcmdcnt++, MAX_RFDEPENDCMD_CNT, CMDID_END, 0, 0, 0);
+
+  do {
+    switch (*stage) {
+    case 0:
+      currentcmd = &precommandcmd[*step];
+      break;
+    case 1:
+      currentcmd = &rfdependcmd[*step];
+      break;
+    case 2:
+      currentcmd = &postcommandcmd[*step];
+      break;
+    default:
+      assert(false && "invalid stage");
+    }
+    if (currentcmd->cmdid == CMDID_END) {
+      if (*stage == 2) {
+        return true;
+      }
+      (*stage)++;
+      (*step) = 0;
+      continue;
+    }
+
+    switch (currentcmd->cmdid) {
+    case CMDID_SET_TXPOWEROWNER_LEVEL:
+      phy_set_txpower_level(driver, channel);
+      break;
+    case CMDID_WRITEPORT_ULONG:
+      driver.write_nic_reg(currentcmd->para1, currentcmd->para2);
+      break;
+    case CMDID_WRITEPORT_USHORT:
+      driver.write_nic_reg16(currentcmd->para1, (uint16_t) currentcmd->para2);
+      break;
+    case CMDID_WRITEPORT_UCHAR:
+      driver.write_nic_reg8(currentcmd->para1, (uint8_t) currentcmd->para2);
+      break;
+    case CMDID_RF_WRITEREG:
+      assert(driver.num_total_rfpath > 0);
+      for (rfpath = 0; rfpath < driver.num_total_rfpath; ++rfpath) {
+        driver.rfreg_chnlval[rfpath] = ((driver.rfreg_chnlval[rfpath] & 0xfffffc00) | currentcmd->para2);
+        rtl_set_rfreg(driver, (enum radio_path) rfpath, currentcmd->para1, RFREG_OFFSET_MASK, driver.rfreg_chnlval[rfpath]);
+      }
+      break;
+    default:
+      assert(false && "invalid command id");
+    }
+
+    break;
+  } while (true);
+
+  *delay = currentcmd->msdelay;
+  (*step)++;
+  return false;
+}
+
+// follow rtl88e_phy_sw_chnl in linux
+void phy_sw_chnl(Rtl88eeDriver& driver) {
+  driver.current_channel = 1;
+  driver.sw_chnl_stage = driver.sw_chnl_step = 0;
+  uint32_t delay;
+
+  do {
+    if (!phy_sw_chnl_step_by_step(driver, driver.current_channel, &driver.sw_chnl_stage, &driver.sw_chnl_step, &delay)) {
+      if (delay > 0) {
+        msleep(delay);
+      } else {
+        continue;
+      }
+    }
+    break;
+  } while (true);
+}
+
+// follow rtl88ee_update_channel_access_setting in linux
+void update_channel_access_setting(Rtl88eeDriver& driver) {
+  uint8_t slot_time = 0x14;
+  uint16_t sifs_timer = 0x0a0a;
+  {
+    // set HW_VAR_SLOT_TIME
+    driver.write_nic_reg8(REG_SLOT, slot_time);
+    uint8_t e_aci;
+    for (e_aci = 0; e_aci < AC_MAX; ++e_aci) {
+      // set_hw_reg(hw, HW_VAR_AC_PARAM, &e_aci)
+      // dm_init_edca_turbo(driver); // skip this for now since no hw regs are written
+      // assume acm_method == EACMWAY2_SW. So nothing more to be done here.
+    }
+  }
+
+  {
+    // set HW_VAR_SIFS
+    driver.write_nic_reg8(REG_SIFS_CTX + 1, sifs_timer & 0xFF);
+    driver.write_nic_reg8(REG_SIFS_TRX + 1, sifs_timer >> 8);
+
+    driver.write_nic_reg8(REG_SPEC_SIFS + 1, sifs_timer & 0xFF);
+    driver.write_nic_reg8(REG_MAC_SPEC_SIFS + 1, sifs_timer & 0xFF);
+
+    driver.write_nic_reg16(REG_RESP_SIFS_OFDM, 0x0e0e);
+  }
+}
+
+enum ht_channel_width {
+  HT_CHANNEL_WIDTH_20 = 0,
+  HT_CHANNEL_WIDTH_20_40 = 1,
+  HT_CHANNEL_WIDTH_80 = 2,
+  HT_CHANNEL_WIDTH_MAX,
+};
+
+// follow rtl88e_phy_rf6052_set_bandwidth in linux
+void phy_rf6052_set_bandwidth(Rtl88eeDriver& driver, uint8_t current_chan_bw) {
+  assert(current_chan_bw == HT_CHANNEL_WIDTH_20);
+  driver.rfreg_chnlval[0] = ((driver.rfreg_chnlval[0] & 0xfffff3ff) | BIT(10) | BIT(11));
+  rtl_set_rfreg(driver, RF90_PATH_A, RF_CHNLBW, RFREG_OFFSET_MASK, driver.rfreg_chnlval[0]);
+}
+
+// follow rtl88e_phy_set_bw_mode in linux
+void phy_set_bw_mode(Rtl88eeDriver& driver) {
+  uint8_t current_chan_bw = HT_CHANNEL_WIDTH_20;
+  uint8_t reg_bw_opmode = driver.read_nic_reg8(REG_BWOPMODE);
+  uint8_t reg_prsr_rsc = driver.read_nic_reg8(REG_RRSR + 2);
+
+  assert(current_chan_bw == HT_CHANNEL_WIDTH_20);
+  reg_bw_opmode |= BW_OPMODE_20MHZ;
+  driver.write_nic_reg8(REG_BWOPMODE, reg_bw_opmode);
+
+  assert(current_chan_bw == HT_CHANNEL_WIDTH_20);
+  rtl_set_bbreg(driver, RFPGA0_RFMOD, BRFMOD, 0x0);
+  rtl_set_bbreg(driver, RFPGA1_RFMOD, BRFMOD, 0x0);
+
+  phy_rf6052_set_bandwidth(driver, current_chan_bw);
+}
+
+// follow rtl_op_config in linux. Call this since I see related logs in dmesg
+// on debian.
+void rtl_op_config(Rtl88eeDriver& driver) {
+  // switch_channel
+  phy_sw_chnl(driver);
+
+  // set_channel_access
+  update_channel_access_setting(driver);
+
+  // set_bw_mode
+  phy_set_bw_mode(driver);
+}
+
+// follow rtl88ee_gpio_radio_on_off_checking in linux
+bool gpio_radio_on_off_checking(Rtl88eeDriver& driver, uint8_t* valid) {
+  // ignore for now
+  return true;
+}
+
+void rtl_init_rfkill(Rtl88eeDriver& driver) {
+  uint8_t valid = 0;
+  // wihpy_rfkill_set_hw_state is not called here (unlike linux)
+  gpio_radio_on_off_checking(driver, &valid);
+}
+
+int rtl_pci_intr_mode_decide(Rtl88eeDriver& driver) {
+  // TODO: I don't know how to enable MSI interrupt mode yet
+  return 0;
+}
+
+void rtl_pci_probe(Rtl88eeDriver& driver) {
+  int err = rtl_pci_intr_mode_decide(driver);
+  assert(!err);
 }
 
 void wifi_init() {
@@ -1592,6 +1847,8 @@ void wifi_init() {
 
   printf("RTL88EE interrupt line %d, pin %d\n", wifi_nic_pci_func.interrupt_line(), wifi_nic_pci_func.interrupt_pin());
 
+  register_irq_handler(wifi_nic_pci_func.interrupt_line(), (void*) wifi_irq_handler);
+
   // enable bus master
   wifi_nic_pci_func.enable_bus_master();
 
@@ -1600,6 +1857,11 @@ void wifi_init() {
   map_region((phys_addr_t) kernel_page_dir, membar.get_addr(), membar.get_addr(), membar.get_size(), MAP_FLAG_WRITE);
 
   Rtl88eeDriver driver(wifi_nic_pci_func, membar);
+  rtl_pci_probe(driver);
+
+  rtl_init_rfkill(driver);
+
+  driver_ptr = &driver;
   driver.enable_interrupt();
 
   uint8_t reg_9346cr = driver.read_nic_reg8(REG_9346CR);
@@ -1617,10 +1879,12 @@ void wifi_init() {
   driver.hal_state = true;
 
   rtl_op_add_interface(driver);
+  rtl_op_config(driver);
 
   // TODO these are debugging code that should be removed later
   int idx = 0;
-  while (idx < 15) {
+  // while (idx < 15) {
+  while (idx < 5) {
     printf("idx %d, own %d\n", idx++, rx_ring[driver.rxidx].own);
     msleep(2000);
   }

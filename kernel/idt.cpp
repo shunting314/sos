@@ -21,6 +21,15 @@ static void incTick() {
   ++timer_tick;
 }
 
+void *irq_handlers[16];
+
+void register_irq_handler(int idx, void *handler) {
+  assert(idx >= 0 && idx < 16);
+  assert(handler);
+  assert(!irq_handlers[idx]);
+  irq_handlers[idx] = handler;
+}
+
 // the handler for interrupts we care. Force C symbol to make it convenient to call
 // it from assembly.
 extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
@@ -63,11 +72,13 @@ extern "C" void interrupt_handler(int32_t intNum, InterruptFrame* framePtr) {
     assert(false && "pfhandler should not return");
   }
 
-  // IRQ for rtl8188ee. Ignore for now.
-  // TODO: will this change? The IRQ number can be read from PCI configuration
-  // space.
-  if (intNum == 32 + 11) {
-    printf("Ignore RTL88EE interrupt\n");
+  if (intNum >= 32 && intNum < 48) { // irq
+    int irq = intNum - 32;
+    if (irq_handlers[irq]) {
+      ((void(*)())irq_handlers[irq])();
+    } else {
+      printf("Ignore IRQ interrupt %d\n", irq);
+    }
     framePtr->returnFromInterrupt();
   }
 

@@ -28,6 +28,7 @@
 
 #define REG_HISR 0x00B4
 
+#define ISR REG_HISR
 #define REG_HIMRE 0x00B8
 
 #define REG_HISRE 0x00BC
@@ -63,9 +64,13 @@
 #define REG_TX_RPT_TIME 0x04F0
 
 #define REG_BCNTCFG 0x0510
+#define REG_SIFS_CTX 0x0514
+#define REG_SIFS_TRX 0x0516
+#define REG_SLOT 0x051B
 #define REG_TBTT_PROHIBIT 0x0540
 #define REG_BCN_CTRL 0x0550
 
+#define REG_BWOPMODE 0x0603
 #define REG_TCR 0x0604
 #define REG_RCR 0x0608
 #define REG_RX_DRVINFO_SZ 0x060F
@@ -93,8 +98,11 @@
 
 #define REG_TXPKTBUF_BCNQ_BDNY 0x0424
 #define REG_TXPKTBUF_MGQ_BDNY 0x0425
+#define REG_SPEC_SIFS 0x0428
 #define REG_TXPAUSE 0x0522
 
+#define REG_MAC_SPEC_SIFS 0x063A
+#define REG_RESP_SIFS_OFDM 0x063E
 #define REG_CAMCMD 0x0670
 
 // mac address
@@ -224,6 +232,7 @@
 #define FEN_PPLL BIT(7)
 
 #define RFPGA0_RFMOD 0x800
+#define RFPGA1_RFMOD 0x900
 #define BCCKEN 0x1000000
 #define BOFDMEN 0x2000000
 
@@ -277,3 +286,9 @@
 
 #define RETRY_LIMIT_SHORT_SHIFT 8
 #define RETRY_LIMIT_LONG_SHIFT 0
+
+#define RF_CHNLBW 0x18
+
+#define BW_OPMODE_20MHZ BIT(2)
+#define BRFMOD 0x1
+
