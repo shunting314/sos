@@ -21,3 +21,24 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [Linux firmware - gentoo wiki](https://wiki.gentoo.org/wiki/Linux_firmware)
 - [About firmware - lfs](https://www.linuxfromscratch.org/blfs/view/svn/postlfs/firmware.html): This doc mentions various firmware file can be found at: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain . I found the firmware file for rtl8188ee (https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rtlwifi/rtl8188efw.bin).
 
+# Note
+
+- BSSID or basic service set ID represnts mac address of the AP (access point) in infrastructure BSS.
+
+- skip calling `enable_interrupt` in `rtl_pci_start` will cause network fail. Can no longer ssh onto the machine!
+
+- Add non-rate-limited log to `rtl88ee_enable_interrupt` / `rtl88ee_disable_interrupt` will flood dmesg since the interrupt handler will disable interrupt at the beginning and enable it in the end.
+
+- linux still works after disabling the following features
+  - by default linux rtl8188ee driver uses MSI interrupt mode. But forcing pin-based interrupt mode still works. So we don't need bother figuring out how to support MSI interrupt mode immediately.
+  - in `rtl_pci_probe` -> `_rtl_pci_find_adapter` -> `rtl_pci_parse_configuration` a pci register with offset 0x70f is written. This can only be done with PCIe since PCI only support 256 bytes configuration space. However, skipping this write still work on debian.. Not urgent to support PCIe ATM.
+  - disabling `rtl88ee_hal_cfg.write_readback` in sw.c
+  - change all functions in led.c, ps.c to dummy return
+  - skip calling `rtl_pci_init_aspm`, `rtl_init_rfkill` in `rtl_pci_probe`
+  - skip calling `rtl_regd_init` in `rtl_init_core`.
+  - skip calling `_rtl88ee_poweroff_adapter`, `_rtl88ee_set_media_status` in `rtl88ee_card_disable`
+  - change all callbacks used in `_rtl_init_deferred_work` to dummy return function
+  - change `rtl_op_bss_info_changed`, `rtl_op_stop` to dummy return
+
+- change `rtl_op_remove_interface` to dummy return cause wifi not work!
+

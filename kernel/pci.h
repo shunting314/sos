@@ -250,6 +250,10 @@ class PCIFunction {
     write_config<uint32_t>(CONFIG_OFF_COMMAND_STATUS, oldval | (1 << COMMAND_STATUS_BUS_MASTER_BIT));
   }
 
+  uint32_t get_command_status() const {
+    return read_config<uint32_t>(CONFIG_OFF_COMMAND_STATUS);
+  }
+
   template <typename T>
   void write_config(uint8_t offset, uint32_t newval) const {
     uint32_t item_size = sizeof(T);
@@ -258,11 +262,29 @@ class PCIFunction {
     assert(((item_size & (item_size - 1)) == 0) && "size should be a power of 2");
     auto addr = get_config_address(offset);
 
-    // make the lowest 2 bits
-    pci_addr_port.write(addr & ~0x3);
 
-    assert(item_size == 4 && "We need read the dword first in order to write a partial dword");
-    pci_data_port.write(newval);
+    if (item_size == 4) {
+      // easy case
+      // mask the lowest 2 bits
+      assert((addr & 3) == 0);
+      pci_addr_port.write(addr);
+      pci_data_port.write(newval);
+    } else {
+      uint32_t oldval = read_config<uint32_t>(offset & ~0x3);
+
+      // calculate the mask & shift for the value to set
+      int shift = ((offset & 3) << 3);
+      int nbits = (item_size << 3);
+      uint32_t mask = ((1 << nbits) - 1);
+      uint32_t shifted_mask = (mask << shift);
+
+      assert((newval & ~mask) == 0);
+      uint32_t finalval = (oldval & ~shifted_mask) | (newval << shift);
+
+      // mask the lowest 2 bits
+      pci_addr_port.write(addr & ~0x3);
+      pci_data_port.write(finalval);
+    }
   }
 
   template <typename T>
@@ -273,7 +295,7 @@ class PCIFunction {
     assert(((return_size & (return_size - 1)) == 0) && "size should be a power of 2");
     auto addr = get_config_address(offset);
 
-    // make the lowest 2 bits
+    // mask the lowest 2 bits
     pci_addr_port.write(addr & ~0x3);
     // TODO: PCI use little endian. Need do byte swapping for big endian processors
     uint32_t data = pci_data_port.read();

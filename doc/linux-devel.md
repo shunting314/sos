@@ -17,3 +17,4 @@ The official website provide usb image to install both the desktop (with UI) ver
 - [How to Build Linux Kernel From Scratch](https://phoenixnap.com/kb/build-linux-kernel)
 - [How to become a Linux kernel developer](https://medium.com/@azerella/how-to-become-a-linux-kernel-developer-20774c72ab07)
 - [Debugging by printing](https://elinux.org/Debugging_by_printing): use 'dmesg' to see the output of printk.
+- [dump\_stack in linux kernel](https://embeddedguruji.blogspot.com/2019/05/linux-device-driver-example-for.html)

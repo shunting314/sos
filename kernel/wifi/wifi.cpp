@@ -254,21 +254,6 @@ uint32_t Rtl88eeDriver::initializeTxRing(TxDesc* ring, int size) {
 }
 
 void Rtl88eeDriver::enable_interrupt() {
-  irq_mask[0] = (
-    IMR_PSTIMEOUT |
-    IMR_HSISR_IND_ON_INT |
-    IMR_C2HCMD |
-    IMR_HIGHDOK |
-    IMR_MGNTDOK |
-    IMR_BKDOK |
-    IMR_BEDOK |
-    IMR_VIDOK |
-    IMR_VODOK |
-    IMR_RDU |
-    IMR_ROK |
-    0
-  );
-  irq_mask[1] = IMR_RXFOVW;
   uint32_t sys_irq_mask = (HSIMR_RON_INT_EN | HSIMR_PDN_INT_EN);
 
   write_nic_reg(REG_HIMR, irq_mask[0]);
@@ -1193,6 +1178,7 @@ void _phy_iq_calibrate(Rtl88eeDriver& driver, long result[][8], uint8_t t, bool 
       break;
     }
   }
+  assert(patha_ok == 0x01);
 
   for (int i = 0; i < retrycount; ++i) {
     patha_ok = phy_path_a_rx_iqk(driver, is2t);
@@ -1204,6 +1190,7 @@ void _phy_iq_calibrate(Rtl88eeDriver& driver, long result[][8], uint8_t t, bool 
       break;
     }
   }
+  assert(patha_ok = 0x03);
 
   assert(!is2t);
 
@@ -1726,7 +1713,7 @@ bool phy_sw_chnl_step_by_step(Rtl88eeDriver& driver, uint8_t channel, uint8_t* s
 
 // follow rtl88e_phy_sw_chnl in linux
 void phy_sw_chnl(Rtl88eeDriver& driver) {
-  driver.current_channel = 1;
+  printf("Switch to channel %d\n", driver.current_channel);
   driver.sw_chnl_stage = driver.sw_chnl_step = 0;
   uint32_t delay;
 
@@ -1803,26 +1790,18 @@ void phy_set_bw_mode(Rtl88eeDriver& driver) {
 // follow rtl_op_config in linux. Call this since I see related logs in dmesg
 // on debian.
 void rtl_op_config(Rtl88eeDriver& driver) {
-  // switch_channel
-  phy_sw_chnl(driver);
+  for (driver.current_channel = 1; driver.current_channel <= 13; ++driver.current_channel) {
+    // switch_channel
+    phy_sw_chnl(driver);
 
-  // set_channel_access
-  update_channel_access_setting(driver);
+    // set_channel_access
+    update_channel_access_setting(driver);
 
-  // set_bw_mode
-  phy_set_bw_mode(driver);
-}
+    // set_bw_mode
+    phy_set_bw_mode(driver);
 
-// follow rtl88ee_gpio_radio_on_off_checking in linux
-bool gpio_radio_on_off_checking(Rtl88eeDriver& driver, uint8_t* valid) {
-  // ignore for now
-  return true;
-}
-
-void rtl_init_rfkill(Rtl88eeDriver& driver) {
-  uint8_t valid = 0;
-  // wihpy_rfkill_set_hw_state is not called here (unlike linux)
-  gpio_radio_on_off_checking(driver, &valid);
+    msleep(5);
+  }
 }
 
 int rtl_pci_intr_mode_decide(Rtl88eeDriver& driver) {
@@ -1830,7 +1809,81 @@ int rtl_pci_intr_mode_decide(Rtl88eeDriver& driver) {
   return 0;
 }
 
+void rtl_pci_parse_configuration() {
+  uint8_t tmp = wifi_nic_pci_func.read_config<uint8_t>(0x98);
+  tmp |= BIT(4);
+  wifi_nic_pci_func.write_config<uint8_t>(0x98, tmp);
+}
+
+// follow rtl88ee_read_eeprom_info in linux
+void read_eeprom_info(Rtl88eeDriver& driver) {
+  uint8_t reg_9346cr = driver.read_nic_reg8(REG_9346CR);
+
+  // follow linux rtl88ee_read_eeprom_info
+  {
+    assert((reg_9346cr & (1 << 4)) == 0 && "Boot from EFUSE rather than EEPROM");
+    assert(reg_9346cr & (1 << 5)); // autoload ok.
+  }
+
+  efuse_power_switch(driver); // follow linux
+  read_efuse(driver);
+}
+
+// follow rtl88e_init_sw_vars in linux
+void init_sw_vars(Rtl88eeDriver& driver) {
+  driver.irq_mask[0] = (
+    IMR_PSTIMEOUT |
+    IMR_HSISR_IND_ON_INT |
+    IMR_C2HCMD |
+    IMR_HIGHDOK |
+    IMR_MGNTDOK |
+    IMR_BKDOK |
+    IMR_BEDOK |
+    IMR_VIDOK |
+    IMR_VODOK |
+    IMR_RDU |
+    IMR_ROK |
+    0
+  );
+  driver.irq_mask[1] = IMR_RXFOVW;
+}
+
+void rtl_init_core(Rtl88eeDriver& driver) {
+  // skip for now.
+}
+
+// initialize ring parameters and the rings themselves
+void rtl_pci_init(Rtl88eeDriver& driver) {
+  // I do this later in init_mac
+}
+
 void rtl_pci_probe(Rtl88eeDriver& driver) {
+  // enable bus master
+  wifi_nic_pci_func.enable_bus_master();
+
+  uint32_t pci_cmd_status = wifi_nic_pci_func.get_command_status();
+  assert((pci_cmd_status & 7) == 7); // io,mem,bus master are enabled
+
+  // disable clk request
+  wifi_nic_pci_func.write_config<uint8_t>(0x81, 0);
+  // leave D3 mode
+  wifi_nic_pci_func.write_config<uint8_t>(0x44, 0);
+  wifi_nic_pci_func.write_config<uint8_t>(0x04, 0x06);
+  wifi_nic_pci_func.write_config<uint8_t>(0x04, 0x07);
+
+  // called by _rtl_pci_find_adapter
+  rtl_pci_parse_configuration();
+
+  read_eeprom_info(driver);
+  init_sw_vars(driver);
+
+  // skip init_sw_leds for now
+  rtl_init_core(driver);
+  rtl_pci_init(driver);
+
+  // linux calls a critical function ieee80211_register_hw here. But there
+  // is no counterpart in SOS.
+
   int err = rtl_pci_intr_mode_decide(driver);
   assert(!err);
 }
@@ -1847,36 +1900,18 @@ void wifi_init() {
 
   printf("RTL88EE interrupt line %d, pin %d\n", wifi_nic_pci_func.interrupt_line(), wifi_nic_pci_func.interrupt_pin());
 
-  register_irq_handler(wifi_nic_pci_func.interrupt_line(), (void*) wifi_irq_handler);
-
-  // enable bus master
-  wifi_nic_pci_func.enable_bus_master();
-
   // according to linux rtl88ee driver, bar with index 2 is used
   Bar membar = wifi_nic_pci_func.getBar(2);
   map_region((phys_addr_t) kernel_page_dir, membar.get_addr(), membar.get_addr(), membar.get_size(), MAP_FLAG_WRITE);
 
   Rtl88eeDriver driver(wifi_nic_pci_func, membar);
-  rtl_pci_probe(driver);
-
-  rtl_init_rfkill(driver);
-
   driver_ptr = &driver;
-  driver.enable_interrupt();
-
-  uint8_t reg_9346cr = driver.read_nic_reg8(REG_9346CR);
-
-  // follow linux rtl88ee_read_eeprom_info
-  {
-    assert((reg_9346cr & (1 << 4)) == 0 && "Boot from EFUSE rather than EEPROM");
-    assert(reg_9346cr & (1 << 5)); // autoload ok.
-  }
-
-  efuse_power_switch(driver); // follow linux
-  read_efuse(driver);
+  register_irq_handler(wifi_nic_pci_func.interrupt_line(), (void*) wifi_irq_handler);
+  rtl_pci_probe(driver);
 
   hw_init(driver);
   driver.hal_state = true;
+  driver.enable_interrupt();
 
   rtl_op_add_interface(driver);
   rtl_op_config(driver);
