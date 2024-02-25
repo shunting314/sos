@@ -152,6 +152,7 @@
 #define ROFDM0_XATXIQIMBALANCE 0xc80
 #define ROFDM0_XCTXAFE 0xc94
 
+#define IMR_DISABLED 0x0
 // IMR DW0
 // Power Save Time Out Interrupt
 #define IMR_PSTIMEOUT (1 << 29)
@@ -283,6 +284,7 @@
 #define DM_REG_ANT_MAPPING1_11N 0x914
 
 #define MSR_NOLINK 0x00
+#define MSR_INFRA 0x02
 
 #define RETRY_LIMIT_SHORT_SHIFT 8
 #define RETRY_LIMIT_LONG_SHIFT 0

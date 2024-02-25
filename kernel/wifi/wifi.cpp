@@ -80,7 +80,8 @@ struct RxDesc {
   uint32_t dummy2;
 };
 
-RxDesc rx_ring[RTL_PCI_MAX_RX_COUNT] __attribute__((aligned(32)));
+// the ring address have to be 256 bytes aligned
+RxDesc rx_ring[RTL_PCI_MAX_RX_COUNT] __attribute__((aligned(256)));
 
 static_assert(sizeof(RxDesc) == 32);
 
@@ -99,13 +100,13 @@ struct TxDesc {
 // - BEACON_QUEUE has size 2;
 // - BE_QUEUE has size 256;
 // - all others have size 128
-TxDesc tx_ring_beacon[2];
-TxDesc tx_ring_mgmt[128];
-TxDesc tx_ring_voq[128];
-TxDesc tx_ring_viq[128];
-TxDesc tx_ring_beq[256];
-TxDesc tx_ring_bkq[128];
-TxDesc tx_ring_hq[128];
+TxDesc tx_ring_beacon[2] __attribute__((aligned(256)));
+TxDesc tx_ring_mgmt[128] __attribute__((aligned(256)));
+TxDesc tx_ring_voq[128] __attribute__((aligned(256)));
+TxDesc tx_ring_viq[128] __attribute__((aligned(256)));
+TxDesc tx_ring_beq[256] __attribute__((aligned(256)));
+TxDesc tx_ring_bkq[128] __attribute__((aligned(256)));
+TxDesc tx_ring_hq[128] __attribute__((aligned(256)));
 
 static_assert(sizeof(TxDesc) == 64);
 
@@ -191,6 +192,7 @@ class Rtl88eeDriver {
   uint32_t rxidx = 0;
 
   void enable_interrupt();
+  void disable_interrupt();
  public:
   // keep this field here since it's initialized and used in set_trx_config and being
   // used again in hw_init
@@ -216,6 +218,7 @@ class Rtl88eeDriver {
   uint8_t sw_chnl_step;
   int num_total_rfpath = 0;
   uint32_t rfreg_chnlval[2];
+  bool mac_func_enable;
  private:
   PCIFunction func_;
   Bar membar_;
@@ -238,6 +241,7 @@ uint32_t Rtl88eeDriver::initializeRxRing() {
   // set eor for the last desc
   desc->eor = 1;
 
+  printf("rx ring address 0x%x\n", ret);
   return ret;
 }
 
@@ -261,6 +265,11 @@ void Rtl88eeDriver::enable_interrupt() {
   write_nic_reg8(REG_C2HEVT_CLEAR, 0);
   // enable system interrupt
   write_nic_reg(REG_HSIMR, sys_irq_mask);
+}
+
+void Rtl88eeDriver::disable_interrupt() {
+  write_nic_reg(REG_HIMR, IMR_DISABLED);
+  write_nic_reg(REG_HIMRE, IMR_DISABLED);
 }
 
 void efuse_power_switch(Rtl88eeDriver& driver) {
@@ -566,7 +575,9 @@ void init_mac(Rtl88eeDriver& driver) {
   driver.write_nic_reg8(MSR, 0x00);
 
   // this assumes rtlhal->mac_func_enable is false
-  llt_table_init(driver);
+  if (!driver.mac_func_enable) {
+    llt_table_init(driver);
+  }
 
   driver.write_nic_reg(REG_HISR, 0xffffffff);
   driver.write_nic_reg(REG_HISRE, 0xffffffff);
@@ -625,16 +636,19 @@ void write_fw(Rtl88eeDriver& driver, uint16_t version, uint8_t *data, uint32_t s
   }
 }
 
+void firmware_selfreset(Rtl88eeDriver& driver) {
+  // firmware_selfreset
+  uint8_t byte = driver.read_nic_reg8(REG_SYS_FUNC_EN + 1);
+  driver.write_nic_reg8(REG_SYS_FUNC_EN + 1, byte & ~(1 << 2));
+  driver.write_nic_reg8(REG_SYS_FUNC_EN + 1, byte | (1 << 2));
+}
+
 // follow _rtl88e_fw_free_to_go in linux
 // Check if the firmware is ready to do.
 void fw_free_to_go(Rtl88eeDriver& driver) {
   driver.poll_nic_reg8(REG_MCUFWDL, FWDL_CHKSUM_RPT, FWDL_CHKSUM_RPT);
   driver.update_nic_reg8(REG_MCUFWDL, MCUFWDL_RDY | WINTINI_RDY, MCUFWDL_RDY);
-  { // firmware_selfreset
-    uint8_t byte = driver.read_nic_reg8(REG_SYS_FUNC_EN + 1);
-    driver.write_nic_reg8(REG_SYS_FUNC_EN + 1, byte & ~(1 << 2));
-    driver.write_nic_reg8(REG_SYS_FUNC_EN + 1, byte | (1 << 2));
-  }
+  firmware_selfreset(driver);
   driver.poll_nic_reg8(REG_MCUFWDL, WINTINI_RDY, WINTINI_RDY);
 }
 
@@ -656,7 +670,10 @@ void download_fw(Rtl88eeDriver& driver) {
   firmware_size -= sizeof(struct rtlwifi_firmware_header);
 
   uint8_t reg_mcufwdl = driver.read_nic_reg8(REG_MCUFWDL);
-  assert((reg_mcufwdl & (1 << 7)) == 0); // no need to do selfreset
+  if (reg_mcufwdl & BIT(7)) {
+    driver.write_nic_reg8(REG_MCUFWDL, 0);
+    firmware_selfreset(driver);
+  }
 
   enable_fw_download(driver, true);
   write_fw(driver, version, firmware_data, firmware_size);
@@ -931,7 +948,6 @@ void enable_hw_security_config(Rtl88eeDriver& driver) {
 void phy_set_rfpath_switch(Rtl88eeDriver& driver, bool bmain, bool is2t) {
   assert(bmain);
   assert(!is2t);
-  assert(!driver.hal_state); // hal is started after hw_init
 
   if (!driver.hal_state) {
     driver.update_nic_reg8(REG_LEDCFG0, BIT(7), BIT(7));
@@ -1482,6 +1498,44 @@ void set_check_bssid(Rtl88eeDriver& driver, bool check_bssid) {
   driver.receive_config = reg_rcr;
 }
 
+enum nl80211_iftype {
+  NL80211_IFTYPE_STATION,
+  NL80211_IFTYPE_UNSPECIFIED,
+};
+
+// follow _rtl88ee_set_media_status in linux
+void set_media_status(Rtl88eeDriver& driver, enum nl80211_iftype type) {
+  uint8_t mode = MSR_NOLINK;
+  uint8_t bt_msr = driver.read_nic_reg8(MSR) & 0xfc;
+
+  switch (type) {
+  case NL80211_IFTYPE_UNSPECIFIED:
+    mode = MSR_NOLINK;
+    break;
+  case NL80211_IFTYPE_STATION:
+    mode = MSR_INFRA;
+    break;
+  default:
+    assert(false && "invalid type");
+  }
+
+  stop_tx_beacon(driver);
+  enable_bcn_sub_func(driver);
+
+  // XXX assume link_state < MAC80211_LINKED. Double check with linux?
+  // otherwise mode will be different.
+  //
+  // It's ok since I only see mode==0 in the log message added to linux.
+  mode = MSR_NOLINK;
+  driver.write_nic_reg8(MSR, bt_msr | mode);
+
+  driver.write_nic_reg8(REG_BCNTCFG + 1, 0x66);
+}
+
+void rtl_op_remove_interface(Rtl88eeDriver& driver) {
+  set_media_status(driver, NL80211_IFTYPE_UNSPECIFIED);
+}
+
 // follow rtl_op_add_interface in linux
 void rtl_op_add_interface(Rtl88eeDriver& driver) {
   // XXX assumes interface type is STATION
@@ -1490,17 +1544,7 @@ void rtl_op_add_interface(Rtl88eeDriver& driver) {
 
   {
     // follow rtl88ee_set_network_type in linux
-
-    { // follow _rtl88ee_set_media_status
-      // XXX skip led for now
-      // XXX assume link_state < MAC80211_LINKED
-      uint8_t mode = MSR_NOLINK;
-      uint8_t bt_msr = driver.read_nic_reg8(MSR) & 0xfc;
-      stop_tx_beacon(driver);
-      enable_bcn_sub_func(driver);
-      driver.write_nic_reg8(MSR, bt_msr | mode);
-      driver.write_nic_reg8(REG_BCNTCFG + 1, 0x66);
-    }
+    set_media_status(driver, NL80211_IFTYPE_STATION);
 
     set_check_bssid(driver, false);
   }
@@ -1518,13 +1562,11 @@ void rtl_op_add_interface(Rtl88eeDriver& driver) {
 void hw_init(Rtl88eeDriver& driver) {
   uint8_t sys_clkr_p1 = driver.read_nic_reg8(REG_SYS_CLKR + 1);
   uint8_t reg_cr = driver.read_nic_reg8(REG_CR);
-  bool mac_func_enable;
   if ((sys_clkr_p1 & (1 << 3)) && (reg_cr != 0 && reg_cr != 0xEA)) {
-    mac_func_enable = true;
+    driver.mac_func_enable = true;
   } else {
-    mac_func_enable = false;
+    driver.mac_func_enable = false;
   }
-  assert(!mac_func_enable); // it's false for my 8188ee. Only support this case right now.
   init_mac(driver);
   download_fw(driver);
   phy_mac_config(driver);
@@ -1544,6 +1586,8 @@ void hw_init(Rtl88eeDriver& driver) {
   hw_configure(driver);
   cam_reset_all_entry(driver);
   enable_hw_security_config(driver);
+
+  driver.mac_func_enable = true;
 
   // set mac addr
   for (int i = 0; i < ETH_ALEN; ++i) {
@@ -1584,13 +1628,18 @@ Rtl88eeDriver* driver_ptr = nullptr;
 void wifi_irq_handler(void) {
   assert(driver_ptr);
   Rtl88eeDriver& driver = *driver_ptr;
+
+  driver_ptr->disable_interrupt();
+
   uint32_t inta = driver.read_nic_reg(ISR) & driver.irq_mask[0];
   driver.write_nic_reg(ISR, inta);
 
   uint32_t intb = driver.read_nic_reg(REG_HISRE) & driver.irq_mask[1];
   driver.write_nic_reg(REG_HISRE, intb);
 
-  printf("inta 0x%x, intb 0x%x\n", inta, intb);
+  // printf("= in wifi_irq_handler:inta 0x%x, intb 0x%x\n", inta, intb);
+
+  driver_ptr->enable_interrupt();
 }
 
 #define MAX_PRECMD_CNT 16
@@ -1628,8 +1677,7 @@ static void phy_set_sw_chnl_cmdarray(struct swchnlcmd *cmdtable, uint32_t cmdtab
 
 // follow rtl88e_phy_set_txpower_level in linux
 void phy_set_txpower_level(Rtl88eeDriver& driver, uint8_t channel) {
-  // TODO NYI
-  printf("phy_set_txpower_level not implemented yet\n"); // TODO
+  // printf("phy_set_txpower_level not implemented yet\n");
 }
 
 // follow _rtl88e_phy_sw_chnl_step_by_step in linux
@@ -1888,6 +1936,12 @@ void rtl_pci_probe(Rtl88eeDriver& driver) {
   assert(!err);
 }
 
+void rtl_pci_start(Rtl88eeDriver& driver) {
+  hw_init(driver);
+  driver.enable_interrupt();
+  driver.hal_state = true;
+}
+
 void wifi_init() {
   if (!wifi_nic_pci_func) {
     printf("No wifi nic found\n");
@@ -1909,19 +1963,22 @@ void wifi_init() {
   register_irq_handler(wifi_nic_pci_func.interrupt_line(), (void*) wifi_irq_handler);
   rtl_pci_probe(driver);
 
-  hw_init(driver);
-  driver.hal_state = true;
-  driver.enable_interrupt();
-
+  rtl_pci_start(driver);
   rtl_op_add_interface(driver);
+
+  rtl_op_remove_interface(driver);
+  rtl_pci_start(driver);
+  rtl_op_add_interface(driver);
+
   rtl_op_config(driver);
 
-  // TODO these are debugging code that should be removed later
-  int idx = 0;
-  // while (idx < 15) {
-  while (idx < 5) {
-    printf("idx %d, own %d\n", idx++, rx_ring[driver.rxidx].own);
-    msleep(2000);
+  RxDesc* desc = &rx_ring[driver.rxidx];
+  if (desc->own) {
+    printf("No rx desc ready yet!\n");
+  } else {
+    printf("Received an rx desc len %d\n", desc->pkt_len);
+    printf("buff addr %p\n", (void*) desc->buff_addr);
+    hexdump((const uint8_t*) desc->buff_addr, min(desc->pkt_len, 256));
   }
 
   safe_assert(false && "found wifi nic");

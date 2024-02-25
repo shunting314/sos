@@ -20,10 +20,16 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [802.11 Wireless Networks: the definitive guide](https://paginas.fe.up.pt/~ee05005/tese/arquivos/ieee80211.pdf)
 - [Linux firmware - gentoo wiki](https://wiki.gentoo.org/wiki/Linux_firmware)
 - [About firmware - lfs](https://www.linuxfromscratch.org/blfs/view/svn/postlfs/firmware.html): This doc mentions various firmware file can be found at: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain . I found the firmware file for rtl8188ee (https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rtlwifi/rtl8188efw.bin).
+- [How to learn mac80211 - StackOverflow](https://stackoverflow.com/questions/7157181/how-to-learn-the-structure-of-linux-wireless-drivers-mac80211)
+  - the [slides](https://wireless.wiki.kernel.org/_media/en/developers/documentation/mac80211.pdf) referred to in the answer gives a good high level overview of wireless network infrastructure in linux.
+- [MSDU](https://en.wikipedia.org/wiki/MAC_service_data_unit)
+- [Frame aggregation](https://en.wikipedia.org/wiki/MAC_service_data_uni://en.wikipedia.org/wiki/Frame_aggregation)
 
 # Note
 
 - BSSID or basic service set ID represnts mac address of the AP (access point) in infrastructure BSS.
+
+- uapi folder in linux kernel means those files are user visible. Check [this](https://stackoverflow.com/questions/18858190/whats-in-include-uapi-of-kernel-source-project).
 
 - skip calling `enable_interrupt` in `rtl_pci_start` will cause network fail. Can no longer ssh onto the machine!
 
