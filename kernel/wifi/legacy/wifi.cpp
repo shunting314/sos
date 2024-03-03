@@ -1,5 +1,5 @@
-#include <kernel/wifi/wifi.h>
-#include <kernel/wifi/rtl8188ee.h>
+#include <kernel/wifi/legacy/wifi.h>
+#include <kernel/wifi/legacy/rtl8188ee.h>
 #include <kernel/phys_page.h>
 #include <kernel/paging.h>
 #include <kernel/sleep.h>
