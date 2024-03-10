@@ -13,10 +13,11 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [Linux Kernel code cross reference](https://elixir.bootlin.com/linux/latest/source)
 - [802.11 Frame Types](https://en.wikipedia.org/wiki/802.11_Frame_Types): mainly describe the frame control word in an 802.11 frame.
 - [Frame check sequence - wikipedia](https://en.wikipedia.org/wiki/Frame_check_sequence): it's used in both ethernet frame and 802.11 frame
-- [How Does A Computer Detect Wifi? - superuser](https://superuser.com/questions/1470252/how-does-a-computer-detect-wifi): This doc refers to the ieee 802.11 spec!
 - [Beacon Frame - wikipedia](https://en.wikipedia.org/wiki/Beacon_frame)
 - [IEEE 802 - wikipedia](https://en.wikipedia.org/wiki/IEEE_802)
 - [IEEE 802.11 - wikipedia](https://en.wikipedia.org/wiki/IEEE_802.11)
+- [How Does A Computer Detect Wifi? - superuser](https://superuser.com/questions/1470252/how-does-a-computer-detect-wifi): This doc refers to an old version of the ieee 802.11 spec!
+- [802.11 Spec](https://ieeexplore.ieee.org/document/9363693): Need create an IEEE account to download for free. This is a 4000+ pages large doc!
 - [802.11 Wireless Networks: the definitive guide](https://paginas.fe.up.pt/~ee05005/tese/arquivos/ieee80211.pdf)
 - [Linux firmware - gentoo wiki](https://wiki.gentoo.org/wiki/Linux_firmware)
 - [About firmware - lfs](https://www.linuxfromscratch.org/blfs/view/svn/postlfs/firmware.html): This doc mentions various firmware file can be found at: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain . I found the firmware file for rtl8188ee (https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rtlwifi/rtl8188efw.bin).
@@ -47,4 +48,5 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
   - change `rtl_op_bss_info_changed`, `rtl_op_stop` to dummy return
 
 - change `rtl_op_remove_interface` to dummy return cause wifi not work!
+
 

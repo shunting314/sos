@@ -1,4 +1,4 @@
-#include <kernel/wifi/legacy/wifi.h>
+#include <kernel/wifi/wifi.h>
 #include <kernel/wifi/legacy/rtl8188ee.h>
 #include <kernel/phys_page.h>
 #include <kernel/paging.h>
@@ -1623,6 +1623,19 @@ void hw_init(Rtl88eeDriver& driver) {
   driver.rfreg_chnlval[0] = driver.rfreg_chnlval[0] & 0xfff00fff;
 }
 
+void wifi_irq_handler_recv(Rtl88eeDriver& driver) {
+  while (true) {
+    RxDesc* desc = &rx_ring[driver.rxidx];
+    if (desc->own) {
+      break;
+    }
+    driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
+
+    assert(desc->pkt_len > 32);
+    _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
+  }
+}
+
 Rtl88eeDriver* driver_ptr = nullptr;
 
 void wifi_irq_handler(void) {
@@ -1637,7 +1650,10 @@ void wifi_irq_handler(void) {
   uint32_t intb = driver.read_nic_reg(REG_HISRE) & driver.irq_mask[1];
   driver.write_nic_reg(REG_HISRE, intb);
 
-  // printf("= in wifi_irq_handler:inta 0x%x, intb 0x%x\n", inta, intb);
+  printf("= in wifi_irq_handler:inta 0x%x, intb 0x%x\n", inta, intb);
+  if (inta & IMR_ROK) {
+    wifi_irq_handler_recv(driver);
+  }
 
   driver_ptr->enable_interrupt();
 }
@@ -1761,7 +1777,7 @@ bool phy_sw_chnl_step_by_step(Rtl88eeDriver& driver, uint8_t channel, uint8_t* s
 
 // follow rtl88e_phy_sw_chnl in linux
 void phy_sw_chnl(Rtl88eeDriver& driver) {
-  printf("Switch to channel %d\n", driver.current_channel);
+  // printf("Switch to channel %d\n", driver.current_channel);
   driver.sw_chnl_stage = driver.sw_chnl_step = 0;
   uint32_t delay;
 
@@ -1838,6 +1854,7 @@ void phy_set_bw_mode(Rtl88eeDriver& driver) {
 // follow rtl_op_config in linux. Call this since I see related logs in dmesg
 // on debian.
 void rtl_op_config(Rtl88eeDriver& driver) {
+  printf("Scanning channels...\n");
   for (driver.current_channel = 1; driver.current_channel <= 13; ++driver.current_channel) {
     // switch_channel
     phy_sw_chnl(driver);
@@ -1972,14 +1989,30 @@ void wifi_init() {
 
   rtl_op_config(driver);
 
+  #if 0
   RxDesc* desc = &rx_ring[driver.rxidx];
   if (desc->own) {
     printf("No rx desc ready yet!\n");
   } else {
     printf("Received an rx desc len %d\n", desc->pkt_len);
     printf("buff addr %p\n", (void*) desc->buff_addr);
-    hexdump((const uint8_t*) desc->buff_addr, min(desc->pkt_len, 256));
+
+    assert(desc->pkt_len > 32);
+    _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
+  }
+  #endif
+
+  // waiting for interrupts
+  while (true) {
+    // TODO: why there are no further interrupts triggerred???
+    RxDesc* desc = &rx_ring[driver.rxidx];
+    if (!desc->own) {
+      assert(desc->pkt_len > 32);
+      _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
+      driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
+    }
+    msleep(10);
   }
 
-  safe_assert(false && "found wifi nic");
+  safe_assert(false && "wifi_init halt");
 }
