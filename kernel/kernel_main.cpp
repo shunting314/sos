@@ -12,6 +12,7 @@
 #include <kernel/sleep.h>
 #include <kernel/pit.h>
 #include <kernel/usb/usb.h>
+#include <kernel/config.h>
 #include <stdio.h>
 
 void test_kernel();
@@ -67,6 +68,8 @@ extern "C" void kernel_main() {
 #endif
   usb_init();
   SimFs::get().init();
+
+  kernel_config_init();
 
   // NOTE the allocated memory from readFile is not freed.
   set_dwarf_ctx_elf_buf(SimFs::get().readFile("/kernel.sym"));
