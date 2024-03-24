@@ -16,6 +16,7 @@ int strlen(const char *s);
 char *strcpy(char *dst, const char *src);
 char *strncpy(char* dst, const char* src, int n);
 char *strdup(const char* s);
+char *strndup(const char* s, int n);
 
 #ifdef __cplusplus
 }

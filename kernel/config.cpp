@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <vector.h>
 #include <ctype.h>
+#include <string.h>
 
 struct ConfigEntry {
   // The memory for name and value are allocated by malloc.
@@ -31,13 +32,6 @@ const char *get_wireless_network_password() {
   return get_config("wireless_network_password");
 }
 
-char* _strdup(const char* s, int len) {
-  char* dst = (char*) malloc(len + 1);
-  memmove(dst, s, len);
-  dst[len] = '\0';
-  return dst;
-}
-
 void kernel_config_init() {
   int filesize;
   char *filebuf = (char*) SimFs::get().readFile("/sos.cfg", &filesize);
@@ -61,8 +55,8 @@ void kernel_config_init() {
     }
 
     ConfigEntry entry;
-    entry.name = _strdup(cur, eq - cur);
-    entry.value = _strdup(eq + 1, kvend - eq - 1);
+    entry.name = strndup(cur, eq - cur);
+    entry.value = strndup(eq + 1, kvend - eq - 1);
     entryList_.push_back(entry);
     cur = kvend;
     if (cur != bufend) {

@@ -423,6 +423,7 @@ void read_efuse(Rtl88eeDriver& driver) {
   for (int i = 0; i < 6; ++i) {
     printf(" %x", efuse_tbl[EEPROM_MAC_ADDR + i]);
     driver.mac_addr[i] = efuse_tbl[EEPROM_MAC_ADDR + i];
+    self_mac_addr[i] = driver.mac_addr[i];
   }
   printf("\n");
   uint16_t eeprom_id = *(uint16_t*) efuse_tbl;
@@ -1855,7 +1856,12 @@ void phy_set_bw_mode(Rtl88eeDriver& driver) {
 // on debian.
 void rtl_op_config(Rtl88eeDriver& driver) {
   printf("Scanning channels...\n");
+  #if 0
   for (driver.current_channel = 1; driver.current_channel <= 13; ++driver.current_channel) {
+  #else
+  {
+    driver.current_channel = 10; // XXX for testing. My wifi uses this channel
+  #endif
     // switch_channel
     phy_sw_chnl(driver);
 
@@ -1983,9 +1989,11 @@ void wifi_init() {
   rtl_pci_start(driver);
   rtl_op_add_interface(driver);
 
+  #if 0
   rtl_op_remove_interface(driver);
   rtl_pci_start(driver);
   rtl_op_add_interface(driver);
+  #endif
 
   rtl_op_config(driver);
 
@@ -2002,14 +2010,23 @@ void wifi_init() {
   }
   #endif
 
+  uint8_t probe_request_buf[256];
+  int len = create_probe_request(probe_request_buf, sizeof(probe_request_buf));
+  printf("Create a proble request:\n");
+  hexdump(probe_request_buf, len);
+
   // waiting for interrupts
   while (true) {
     // TODO: why there are no further interrupts triggerred???
     RxDesc* desc = &rx_ring[driver.rxidx];
     if (!desc->own) {
-      assert(desc->pkt_len > 32);
-      _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
-      driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
+      if (desc->pkt_len > 32) {
+        _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
+        driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
+      } else {
+        // TODO why this happen in practice?
+        // assert(desc->pkt_len > 32);
+      }
     }
     msleep(10);
   }

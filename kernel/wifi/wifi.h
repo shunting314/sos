@@ -12,7 +12,13 @@ enum {
 };
 
 enum {
+  MANAGEMENT_FRAME_PROBE_REQUEST = 4,
   MANAGEMENT_FRAME_BEACON = 8,
+  MANAGEMENT_FRAME_ACTION = 13,
+};
+
+enum {
+  DATA_FRAME_DATA = 0,
 };
 
 class macaddr_t {
@@ -76,9 +82,45 @@ struct beacon_body {
   uint16_t capability_info;
 } __attribute__((packed));
 
+enum {
+  ELEMENT_ID_SSID = 0,
+  ELEMENT_ID_SUPPORTED_RATES = 1,
+  ELEMENT_ID_DS_PARAMETER_SET = 3, // use a single byte to encoder the channel number used by the network
+  ELEMENT_ID_TIM = 5, // traffic indication map
+  ELEMENT_ID_COUNTRY = 7,
+  ELEMENT_ID_BSS_LOAD = 11,
+  ELEMENT_ID_POWER_CONSTRAINT = 32,
+  ELEMENT_ID_TPC_REPORT = 35,
+  ELEMENT_ID_ERP = 42,
+  ELEMENT_ID_HT_CAPABILITIES = 45,
+  ELEMENT_ID_RSN = 48, // security related
+  ELEMENT_ID_EXTENDED_SUPPORTED_RATES = 50,  // 0x32
+  ELEMENT_ID_SUPPORTED_OPERATING_CLASSES = 59,
+  ELEMENT_ID_HT_OPERATION = 61,
+  ELEMENT_ID_INTERWORKING = 107,
+  ELEMENT_ID_ADVERTISEMENT_PROTOCOL = 108,
+  ELEMENT_ID_EXTENDED_CAPABILITIES = 127,
+  ELEMENT_ID_VENDOR_SPECIFIC = 221,
+};
+
 struct bss_meta {
   macaddr_t bssid;
-  char name[256];
+  char* name; // the name is malloced but never freed
 };
 
 bool register_found_bss(macaddr_t addr, const char* name, int len);
+// let the caller pass in the buffer instead of returning a allocated buffer
+// so we can save a memcpy later on.
+int create_probe_request(uint8_t* buf, int capability);
+
+#define MAC_ADDR_LEN 6
+extern uint8_t self_mac_addr[MAC_ADDR_LEN];
+
+static bool is_all_zero_mac_addr(uint8_t* addr) {
+  for (int i = 0; i < 6; ++i) {
+    if (addr[i] != 0) {
+      return false;
+    }
+  }
+  return true;
+}

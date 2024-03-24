@@ -104,3 +104,10 @@ char *strdup(const char* s) {
   memmove(dst, s, len + 1);
   return dst;
 }
+
+char *strndup(const char* s, int len) {
+  char* dst = (char*) malloc(len + 1);
+  memmove(dst, s, len);
+  dst[len] = '\0';
+  return dst;
+}
