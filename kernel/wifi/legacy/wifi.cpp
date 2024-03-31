@@ -89,11 +89,87 @@ static_assert(sizeof(RxDesc) == 32);
 // - HW_DESC_OWN
 // - HW_DESC_TX_NEXTDESC_ADDR
 struct TxDesc {
-  uint32_t dummy0: 31;
+  uint32_t pktsize : 16;
+  uint32_t offset : 8;
+  uint32_t dummy0 : 2;
+  uint32_t lastseg : 1;
+  uint32_t firstseg : 1;
+  uint32_t dummy4 : 3;
   uint32_t own: 1;
-  uint32_t dummy1[9];
+
+  uint32_t dummy8 : 20;
+  uint32_t nav_usehdr : 1;
+  uint32_t dummy15 : 1;
+  uint32_t sectype : 2;
+  uint32_t pktoffset : 8;
+
+  uint32_t dummy9 : 12;
+  uint32_t agg_en : 1;
+  uint32_t dummy10 : 19;
+
+  uint32_t dummy13 : 16;
+  uint32_t seq: 12;
+  uint32_t dummy12 : 4;
+
+  uint32_t rtsrate : 5;
+  uint32_t dummy1 : 6;
+  uint32_t cts2self : 1;
+  uint32_t rts_en : 1;
+  uint32_t dummy14 : 13;
+  uint32_t rtsshort : 1;
+  uint32_t rtsbw : 1;
+  uint32_t rtssc : 2;
+  uint32_t rtsstbc : 2;
+
+  uint32_t txrate : 6;
+  uint32_t shortgi : 1;
+  uint32_t dummy7 : 25;
+
+  uint32_t dummy6 : 11;
+  uint32_t maxaggnum : 5;
+  uint32_t dummy11 : 16;
+
+  uint32_t txbuffersize: 16;
+  uint32_t dummy3 : 16;
+
+  uint32_t txbufferaddr, txbufferaddr64;
   uint32_t next_desc_address;
   uint32_t dummy2[5];
+};
+
+struct RxRing {
+  TxDesc* desc_list = nullptr;
+  int idx = 0;
+  int num_desc = -1;
+
+  void transmit_frame(uint8_t *frame_buf, uint32_t len) {
+    assert(idx < num_desc);
+    TxDesc& txdesc = desc_list[idx++];
+    assert(!txdesc.own);
+    assert(!txdesc.txbufferaddr); // the buffer should have already been freed and the field should have already been set to 0
+
+    // clear the txdesc upto next_desc_address first
+    memset(&txdesc, 0, 40); // TODO don't hardcode 40 here
+
+    uint8_t *page_buf = (uint8_t*) alloc_phys_page(); // TODO avoid allocating an entire page
+    txdesc.txbufferaddr = (uint32_t) page_buf;
+
+    txdesc.offset = 0; // TODO: linux set this to 32!
+    assert(txdesc.offset + len <= PAGE_SIZE);
+    { // is this part correct?
+      int real_len = txdesc.offset + len; 
+      txdesc.pktsize = real_len;
+      txdesc.txbuffersize = real_len;
+    }
+    memmove(page_buf + txdesc.offset, frame_buf, len);
+    txdesc.firstseg = txdesc.lastseg = 1;
+
+    // set the own bit to 1 in the end
+    txdesc.own = 1;
+
+    // XXX should we do anything else to notify the adapter that new frame
+    // is ready to be transmitted?
+  }
 };
 
 // linux defines 9 tx rings
@@ -101,7 +177,14 @@ struct TxDesc {
 // - BE_QUEUE has size 256;
 // - all others have size 128
 TxDesc tx_ring_beacon[2] __attribute__((aligned(256)));
-TxDesc tx_ring_mgmt[128] __attribute__((aligned(256)));
+TxDesc tx_ring_mgmt_txdescs[128] __attribute__((aligned(256)));
+
+RxRing tx_mgmt_ring = {
+  .desc_list = tx_ring_mgmt_txdescs,
+  .idx = 0,
+  .num_desc = sizeof(tx_ring_mgmt_txdescs) / sizeof(*tx_ring_mgmt_txdescs)
+};
+
 TxDesc tx_ring_voq[128] __attribute__((aligned(256)));
 TxDesc tx_ring_viq[128] __attribute__((aligned(256)));
 TxDesc tx_ring_beq[256] __attribute__((aligned(256)));
@@ -593,7 +676,7 @@ void init_mac(Rtl88eeDriver& driver) {
   driver.write_nic_reg(REG_RX_DESA, driver.initializeRxRing());
 #define INIT_TX_RING(tx_ring) driver.initializeTxRing(tx_ring, sizeof(tx_ring) / sizeof(tx_ring[0]))
   driver.write_nic_reg(REG_BCNQ_DESA, INIT_TX_RING(tx_ring_beacon));
-  driver.write_nic_reg(REG_MGQ_DESA, INIT_TX_RING(tx_ring_mgmt));
+  driver.write_nic_reg(REG_MGQ_DESA, INIT_TX_RING(tx_ring_mgmt_txdescs));
   driver.write_nic_reg(REG_VOQ_DESA, INIT_TX_RING(tx_ring_voq));
   driver.write_nic_reg(REG_VIQ_DESA, INIT_TX_RING(tx_ring_viq));
   driver.write_nic_reg(REG_BEQ_DESA, INIT_TX_RING(tx_ring_beq));
@@ -2015,8 +2098,13 @@ void wifi_init() {
   printf("Create a proble request:\n");
   hexdump(probe_request_buf, len);
 
+  // send the probe request with the tx management ring
+  printf("before transmit tx own %d\n", tx_mgmt_ring.desc_list[0].own);
+  tx_mgmt_ring.transmit_frame(probe_request_buf, len);
+
+  int print_cnt_tx_own = 0;
   // waiting for interrupts
-  while (true) {
+  for (int itr = 0; ; ++itr) {
     // TODO: why there are no further interrupts triggerred???
     RxDesc* desc = &rx_ring[driver.rxidx];
     if (!desc->own) {
@@ -2026,6 +2114,12 @@ void wifi_init() {
       } else {
         // TODO why this happen in practice?
         // assert(desc->pkt_len > 32);
+      }
+    }
+
+    if (itr % 100 == 0) {
+      if (print_cnt_tx_own++ < 5) {
+        printf("tx own %d\n", tx_mgmt_ring.desc_list[0].own);
       }
     }
     msleep(10);

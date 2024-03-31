@@ -24,7 +24,7 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [How to learn mac80211 - StackOverflow](https://stackoverflow.com/questions/7157181/how-to-learn-the-structure-of-linux-wireless-drivers-mac80211)
   - the [slides](https://wireless.wiki.kernel.org/_media/en/developers/documentation/mac80211.pdf) referred to in the answer gives a good high level overview of wireless network infrastructure in linux.
 - [MSDU](https://en.wikipedia.org/wiki/MAC_service_data_unit)
-- [Frame aggregation](https://en.wikipedia.org/wiki/MAC_service_data_uni://en.wikipedia.org/wiki/Frame_aggregation)
+- [Frame aggregation](https://en.wikipedia.org/wiki/Frame_aggregation)
 - [WPA](https://en.wikipedia.org/wiki/Wi-Fi_Protected_Access): WEP has been deprecated by WPA/WPA2/WPA3.
 
 # Note
@@ -49,4 +49,7 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
   - change `rtl_op_bss_info_changed`, `rtl_op_stop` to dummy return
 
 - change `rtl_op_remove_interface` to dummy return cause wifi not work!
+
+- `ieee80211_is_action`: return true if the frame is an action frame. Action frame
+   is a kind of management frame.
 
