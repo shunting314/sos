@@ -72,12 +72,22 @@ PCIFunction wifi_nic_pci_func;
 // - HW_DESC_RXERO
 struct RxDesc {
   uint32_t pkt_len : 14;
-  uint32_t dummy_fields: 16;
+  uint32_t crc32 : 1;
+  uint32_t icverror: 1;
+  uint32_t drv_infosize: 4;
+  uint32_t security: 3;
+  uint32_t qos: 1;
+  uint32_t shift: 2;
+  uint32_t phystatus: 1;
+  uint32_t swdec: 1;
+  uint32_t lastseg: 1;
+  uint32_t firstseg: 1;
   uint32_t eor: 1; // end of ring?
   uint32_t own: 1;
+
   uint32_t dummy[5];
   uint32_t buff_addr;
-  uint32_t dummy2;
+  uint32_t buff_addr_64;
 };
 
 // the ring address have to be 256 bytes aligned
@@ -137,39 +147,13 @@ struct TxDesc {
   uint32_t dummy2[5];
 };
 
+class Rtl88eeDriver;
 struct RxRing {
   TxDesc* desc_list = nullptr;
   int idx = 0;
   int num_desc = -1;
 
-  void transmit_frame(uint8_t *frame_buf, uint32_t len) {
-    assert(idx < num_desc);
-    TxDesc& txdesc = desc_list[idx++];
-    assert(!txdesc.own);
-    assert(!txdesc.txbufferaddr); // the buffer should have already been freed and the field should have already been set to 0
-
-    // clear the txdesc upto next_desc_address first
-    memset(&txdesc, 0, 40); // TODO don't hardcode 40 here
-
-    uint8_t *page_buf = (uint8_t*) alloc_phys_page(); // TODO avoid allocating an entire page
-    txdesc.txbufferaddr = (uint32_t) page_buf;
-
-    txdesc.offset = 0; // TODO: linux set this to 32!
-    assert(txdesc.offset + len <= PAGE_SIZE);
-    { // is this part correct?
-      int real_len = txdesc.offset + len; 
-      txdesc.pktsize = real_len;
-      txdesc.txbuffersize = real_len;
-    }
-    memmove(page_buf + txdesc.offset, frame_buf, len);
-    txdesc.firstseg = txdesc.lastseg = 1;
-
-    // set the own bit to 1 in the end
-    txdesc.own = 1;
-
-    // XXX should we do anything else to notify the adapter that new frame
-    // is ready to be transmitted?
-  }
+  void transmit_frame(Rtl88eeDriver& driver, uint8_t *frame_buf, uint32_t len);
 };
 
 // linux defines 9 tx rings
@@ -1707,6 +1691,7 @@ void hw_init(Rtl88eeDriver& driver) {
   driver.rfreg_chnlval[0] = driver.rfreg_chnlval[0] & 0xfff00fff;
 }
 
+void handle_received_buffer(RxDesc* desc, uint8_t* buf, int len);
 void wifi_irq_handler_recv(Rtl88eeDriver& driver) {
   while (true) {
     RxDesc* desc = &rx_ring[driver.rxidx];
@@ -1716,16 +1701,19 @@ void wifi_irq_handler_recv(Rtl88eeDriver& driver) {
     driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
 
     assert(desc->pkt_len > 32);
-    _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
+    handle_received_buffer(desc, (uint8_t*) desc->buff_addr, desc->pkt_len);
   }
 }
 
 Rtl88eeDriver* driver_ptr = nullptr;
 
+uint32_t irq_cnt = 0;
 void wifi_irq_handler(void) {
+  printf("+++ Got an interrupt from the adapter %d\n", irq_cnt++);
   assert(driver_ptr);
   Rtl88eeDriver& driver = *driver_ptr;
 
+  asm volatile("cli");
   driver_ptr->disable_interrupt();
 
   uint32_t inta = driver.read_nic_reg(ISR) & driver.irq_mask[0];
@@ -1740,6 +1728,7 @@ void wifi_irq_handler(void) {
   }
 
   driver_ptr->enable_interrupt();
+  asm volatile("sti");
 }
 
 #define MAX_PRECMD_CNT 16
@@ -2048,6 +2037,17 @@ void rtl_pci_start(Rtl88eeDriver& driver) {
   driver.hal_state = true;
 }
 
+// the buffer may contains extra bytes before the 802.11 frame
+void handle_received_buffer(RxDesc* desc, uint8_t* buf, int len) {
+  uint32_t rx_drvinfo_size = desc->drv_infosize * RX_DRV_INFO_SIZE_UNIT;
+  uint32_t rx_bufshift = (desc->shift & 0x03);
+
+  int prologue = rx_drvinfo_size + rx_bufshift;
+  // NOTE: the prologue is NOT subtracted from len! The len field represents
+  // the number of bytes without prologue already.
+  _parse_80211_frame(buf + prologue, len);
+}
+
 void wifi_init() {
   if (!wifi_nic_pci_func) {
     printf("No wifi nic found\n");
@@ -2080,27 +2080,16 @@ void wifi_init() {
 
   rtl_op_config(driver);
 
-  #if 0
-  RxDesc* desc = &rx_ring[driver.rxidx];
-  if (desc->own) {
-    printf("No rx desc ready yet!\n");
-  } else {
-    printf("Received an rx desc len %d\n", desc->pkt_len);
-    printf("buff addr %p\n", (void*) desc->buff_addr);
-
-    assert(desc->pkt_len > 32);
-    _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
-  }
-  #endif
-
   uint8_t probe_request_buf[256];
   int len = create_probe_request(probe_request_buf, sizeof(probe_request_buf));
+  #if 0
   printf("Create a proble request:\n");
   hexdump(probe_request_buf, len);
+  #endif
 
   // send the probe request with the tx management ring
   printf("before transmit tx own %d\n", tx_mgmt_ring.desc_list[0].own);
-  tx_mgmt_ring.transmit_frame(probe_request_buf, len);
+  tx_mgmt_ring.transmit_frame(driver, probe_request_buf, len);
 
   int print_cnt_tx_own = 0;
   // waiting for interrupts
@@ -2109,7 +2098,7 @@ void wifi_init() {
     RxDesc* desc = &rx_ring[driver.rxidx];
     if (!desc->own) {
       if (desc->pkt_len > 32) {
-        _parse_80211_frame((uint8_t*) desc->buff_addr + 32, desc->pkt_len - 32);
+        handle_received_buffer(desc, (uint8_t*) desc->buff_addr, desc->pkt_len);
         driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
       } else {
         // TODO why this happen in practice?
@@ -2118,7 +2107,7 @@ void wifi_init() {
     }
 
     if (itr % 100 == 0) {
-      if (print_cnt_tx_own++ < 5) {
+      if (print_cnt_tx_own++ < 2) {
         printf("tx own %d\n", tx_mgmt_ring.desc_list[0].own);
       }
     }
@@ -2126,4 +2115,35 @@ void wifi_init() {
   }
 
   safe_assert(false && "wifi_init halt");
+}
+
+void RxRing::transmit_frame(Rtl88eeDriver& driver, uint8_t *frame_buf, uint32_t len) {
+  assert(idx < num_desc);
+  TxDesc& txdesc = desc_list[idx++];
+  assert(!txdesc.own);
+  assert(!txdesc.txbufferaddr); // the buffer should have already been freed and the field should have already been set to 0
+
+  // clear the txdesc upto next_desc_address first
+  memset(&txdesc, 0, 40); // TODO don't hardcode 40 here
+
+  uint8_t *page_buf = (uint8_t*) alloc_phys_page(); // TODO avoid allocating an entire page
+  txdesc.txbufferaddr = (uint32_t) page_buf;
+
+  txdesc.offset = 0; // TODO: linux set this to 32!
+  assert(txdesc.offset + len <= PAGE_SIZE);
+  { // is this part correct?
+    int real_len = txdesc.offset + len; 
+    txdesc.pktsize = real_len;
+    txdesc.txbuffersize = real_len;
+  }
+  memmove(page_buf + txdesc.offset, frame_buf, len);
+  txdesc.firstseg = txdesc.lastseg = 1;
+
+  // set the own bit to 1 in the end
+  txdesc.own = 1;
+
+  uint32_t hw_queue = MGNT_QUEUE; // TODO avoid hardcoding
+  // Writing to REG_PCIE_CTRL_REG is very critical so that the hw will process
+  // the tx desc and mark the own bit to 0!
+  driver.write_nic_reg16(REG_PCIE_CTRL_REG, 1 << hw_queue);
 }

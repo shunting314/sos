@@ -5,6 +5,10 @@
  */
 #define BIT(i) (1 << (i))
 
+#define RX_DRV_INFO_SIZE_UNIT 8
+
+#define MGNT_QUEUE 6
+
 #define REG_SYS_FUNC_EN 0x0002
 #define REG_APS_FSMCO 0x0004
 

@@ -56,8 +56,10 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
     int left = buflen - sizeof(*hdr) - sizeof(beacon_body);
     assert(left >= 0);
 
+    #define FCS_LEN 4
+
     // parse the information elements
-    while (left > 0) {
+    while (left > FCS_LEN) {
       if (ptr[0] == ELEMENT_ID_SSID) {
         // SSID
         // register_found_bss(hdr->addr2, (char*) ptr + 2, ptr[1]);
@@ -66,26 +68,19 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
           if (register_found_bss(hdr->addr2, (char*) ptr + 2, ptr[1])) {
             #if 0
             printf("beacon frame length %d\n", buflen);
-            // hexdump(frame_buf, buflen);
-            hexdump(frame_buf - 16, buflen + 16);
+            hexdump(frame_buf, buflen);
             #endif
           }
         }
-
-        // if not break here the while loop will eventually fail on
-        //   assert(left >= ptr[1] + 2);
-        // Don't know why yet.
-        break;
       }
-      // printf("left %d, type %d, len %d\n", left, ptr[0], ptr[1]);
-      assert(left >= ptr[1] + 2);
+      assert(left - FCS_LEN >= ptr[1] + 2);
       int toskip = ptr[1] + 2;
       ptr += toskip;
       left -= toskip;
     }
-    assert(left >= 0); // TODO: change to 'assert(left == 0)' eventually
+    assert(left == FCS_LEN);
   } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_PROBE_REQUEST) {
-    #if 1
+    #if 0
     if (n_probe_request < 1) {
       printf("Received a probe request. #%d\n", n_probe_request++);
       hexdump(frame_buf, buflen);
