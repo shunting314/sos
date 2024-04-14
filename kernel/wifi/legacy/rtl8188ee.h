@@ -298,3 +298,11 @@
 #define BW_OPMODE_20MHZ BIT(2)
 #define BRFMOD 0x1
 
+enum rtl_desc92c_rate {
+  DESC92c_RATE1M = 0x00,
+  DESC92C_RATE2M = 0x01,
+};
+
+enum rtl_desc_qsel {
+  QSLT_MGNT = 0x12,
+};

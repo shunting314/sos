@@ -107,7 +107,10 @@ struct TxDesc {
   uint32_t dummy4 : 3;
   uint32_t own: 1;
 
-  uint32_t dummy8 : 20;
+  uint32_t macid : 6;
+  uint32_t rsvd0 : 2;
+  uint32_t queuesel : 5;
+  uint32_t dummy8 : 7;
   uint32_t nav_usehdr : 1;
   uint32_t dummy15 : 1;
   uint32_t sectype : 2;
@@ -133,7 +136,12 @@ struct TxDesc {
 
   uint32_t txrate : 6;
   uint32_t shortgi : 1;
-  uint32_t dummy7 : 25;
+  uint32_t ccxt : 1;
+  uint32_t txrate_fb_lmt : 5;
+  uint32_t rtsrate_fb_lmt : 4;
+  uint32_t retrylmt_en : 1;
+  uint32_t txretrylmt : 6;
+  uint32_t usb_txaggnum : 8;
 
   uint32_t dummy6 : 11;
   uint32_t maxaggnum : 5;
@@ -1713,7 +1721,9 @@ void wifi_irq_handler(void) {
   assert(driver_ptr);
   Rtl88eeDriver& driver = *driver_ptr;
 
+  #if 0
   asm volatile("cli");
+  #endif
   driver_ptr->disable_interrupt();
 
   uint32_t inta = driver.read_nic_reg(ISR) & driver.irq_mask[0];
@@ -1727,8 +1737,10 @@ void wifi_irq_handler(void) {
     wifi_irq_handler_recv(driver);
   }
 
-  driver_ptr->enable_interrupt();
+  #if 0
   asm volatile("sti");
+  #endif
+  driver_ptr->enable_interrupt();
 }
 
 #define MAX_PRECMD_CNT 16
@@ -2127,17 +2139,37 @@ void RxRing::transmit_frame(Rtl88eeDriver& driver, uint8_t *frame_buf, uint32_t 
   memset(&txdesc, 0, 40); // TODO don't hardcode 40 here
 
   uint8_t *page_buf = (uint8_t*) alloc_phys_page(); // TODO avoid allocating an entire page
-  txdesc.txbufferaddr = (uint32_t) page_buf;
+  assert(len <= PAGE_SIZE);
+  memmove(page_buf, frame_buf, len);
 
-  txdesc.offset = 0; // TODO: linux set this to 32!
-  assert(txdesc.offset + len <= PAGE_SIZE);
-  { // is this part correct?
-    int real_len = txdesc.offset + len; 
-    txdesc.pktsize = real_len;
-    txdesc.txbuffersize = real_len;
-  }
-  memmove(page_buf + txdesc.offset, frame_buf, len);
+  txdesc.offset = 32; // TODO: this follows linux call set_tx_desc_offset
+  txdesc.txrate = DESC92C_RATE2M; // XXX I just pick an arbitrary that looks reasonable.
+  txdesc.shortgi = 0;
+
+  struct ieee80211_hdr* hdr = (struct ieee80211_hdr*) page_buf;
+  int seq_number = hdr->seq_ctl >> 4;
+  txdesc.seq = seq_number;
+  txdesc.pktsize = len;
+  int fw_qsel = QSLT_MGNT;
+  txdesc.queuesel = fw_qsel;
+  txdesc.txrate_fb_lmt = 0x1F;
+  txdesc.rtsrate_fb_lmt = 0xF;
   txdesc.firstseg = txdesc.lastseg = 1;
+  txdesc.txbuffersize = len;
+  txdesc.txbufferaddr = (uint32_t) page_buf;
+ 
+  #if 0
+  // These lines are from linux. After commenting them from linux,
+  // wifi still works. So it should not be critical. It does not bother
+  // to do the same thing in SOS.
+  if (rtlpriv->dm.useramask) {
+    set_tx_desc_rate_id(pdesc, ptcb_desc->ratr_index);
+    set_tx_desc_macid(pdesc, ptcb_desc->mac_id);
+  } else {
+    set_tx_desc_rate_id(pdesc, 0xC + ptcb_desc->ratr_index);
+    set_tx_desc_macid(pdesc, ptcb_desc->ratr_index);
+  }
+  #endif
 
   // set the own bit to 1 in the end
   txdesc.own = 1;
