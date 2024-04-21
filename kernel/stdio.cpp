@@ -5,7 +5,8 @@
 
 // defined in common/printf.cpp
 typedef void putchar_fn_t(char ch);
-int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn);
+typedef void change_color_fn_t(int color_code);
+int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn, change_color_fn_t* change_color_fn);
 
 int printf(const char* fmt, ...) {
   // sometimes we want print to be slower to ease debugging and observing
@@ -22,7 +23,7 @@ int printf(const char* fmt, ...) {
   va_list va;
   va_start(va, fmt);
 
-  return vprintf_int(fmt, va, vga_putchar);
+  return vprintf_int(fmt, va, vga_putchar, change_global_color);
 }
 
 int puts(const char *s) {

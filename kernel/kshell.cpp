@@ -291,6 +291,7 @@ static void handleLine(char *line) {
 }
 
 void kshell() {
+  printf("enter \033[35mkshell\033[m. May start a predefined user problem like the user shell automatically.\n");
   // enable the interrupt here. It's mainly needed when we enter kshell after
   // terminating the last process. In that case, the user process enters kernel
   // by call the exit syscall. Since we use interrupt gate, interrupt is disabled

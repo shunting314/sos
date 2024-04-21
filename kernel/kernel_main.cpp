@@ -46,7 +46,13 @@ static void setup_kernel_malloc() {
 extern "C" void kernel_main() {
   vga_clear();
   kernel_elf_init();
-  puts("Hello, World!");
+  #if 0
+  // color sequence is only handled for printf so far. puts does not
+  // support that.
+  puts("\033[32mHello\033[m, \033[33mWorld\033[m!");
+  #else
+  printf("\033[41m\033[32mHello\033[m, \033[36mWorld\033[m!\n");
+  #endif
 
   init_pit();
   setup_idt();

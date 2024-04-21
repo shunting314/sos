@@ -7,7 +7,6 @@
 #define BASE ((uint16_t*) 0xB8000)
 #define NROW 25
 #define NCOL 80
-#define GRAY_ON_BLACK 0x07
 
 int vga_to_loc(int r, int c) {
   return r * NCOL + c;
@@ -33,6 +32,26 @@ void place_cursor() {
   p1.write((_cursor_loc >> 8) & 0xFF);
 }
 
+#define GRAY_ON_BLACK 0x0700
+int _global_color = GRAY_ON_BLACK;
+
+// color_code 0 mean reset to default.
+// 30 -> 37 changes forground color.
+// 40 -> 47 changes background color.
+void change_global_color(int color_code) {
+  if (color_code == 0) {
+    _global_color = GRAY_ON_BLACK; // reset
+  } else if (color_code >= 30 && color_code <= 37) {
+    // change foreground color
+    _global_color = (_global_color & 0xF0FF) | ((color_code - 30) << 8);
+  } else if (color_code >= 40 && color_code <= 47) {
+    // change background color
+    _global_color = (_global_color & 0x0FFF) | ((color_code - 40) << 12);
+  } else {
+    // invalid color code, just ignore it.
+  }
+}
+
 void vga_putchar(char ch) {
   if (ch == '\r') {
     _cursor_loc -= (_cursor_loc % NCOL);
@@ -47,7 +66,7 @@ void vga_putchar(char ch) {
     }
     return;
   } else {
-    BASE[_cursor_loc] = (ch) | (GRAY_ON_BLACK << 8);
+    BASE[_cursor_loc] = (ch) | _global_color;
     _cursor_loc++;
   }
 
@@ -56,7 +75,7 @@ void vga_putchar(char ch) {
     // We need scroll at most 1 row
     memmove(BASE, BASE + NCOL, (NROW - 1) * NCOL * sizeof(uint16_t));
     for (int c = 0; c < NCOL; ++c) {
-      vga_set_char(NROW - 1, c, ' ' | (GRAY_ON_BLACK << 8));
+      vga_set_char(NROW - 1, c, ' ' | _global_color);
     }
     _cursor_loc -= NCOL;
   }
@@ -69,7 +88,7 @@ void vga_putchar(char ch) {
 void vga_clear() {
   for (int i = 0; i < NROW; ++i) {
     for (int j = 0; j < NCOL; ++j) {
-      vga_set_char(i, j, ' ' | (GRAY_ON_BLACK << 8));
+      vga_set_char(i, j, ' ' | _global_color);
     }
   }
 }
@@ -121,3 +140,5 @@ void show_running_curve() {
     _pause();
   }
 }
+
+

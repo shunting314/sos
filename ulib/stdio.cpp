@@ -38,13 +38,16 @@ void buffered_putchar(char ch) {
 
 // defined in common/printf.cpp
 typedef void putchar_fn_t(char ch);
-int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn);
+typedef void change_color_fn_t(int color_code);
+int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn, change_color_fn_t* change_color_fn);
 
 int printf(const char* fmt, ...) {
   va_list va;
   va_start(va, fmt);
 
-  int ret = vprintf_int(fmt, va, buffered_putchar);
+  // in user space, we pass a null change_color_fn to vprintf_int so that the
+  // color sequence will be passed to kernel directly.
+  int ret = vprintf_int(fmt, va, buffered_putchar, nullptr);
   // flush anything remaining in the buffer
   CharBuffer::get().flush();
   return ret;

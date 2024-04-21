@@ -14,6 +14,8 @@ void show_flashing_digits();
 void show_running_curve();
 void place_cursor();
 
+void change_global_color(int color_code);
+
 #ifdef __cplusplus
 }
 #endif

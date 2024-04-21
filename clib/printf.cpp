@@ -1,7 +1,9 @@
 #include <stdarg.h>
 #include <stdint.h>
+#include <ctype.h>
 
 typedef void putchar_fn_t(char ch);
+typedef void change_color_fn_t(int color_code);
 
 // 64 bit print does not work yet. They depends on symbols like:
 // `__udivdi3' and `__umoddi3'
@@ -28,10 +30,36 @@ void printnum(int num, int base, putchar_fn_t* putchar_fn) {
   }
 }
 
+bool handle_color_sequence(const char*& cp, change_color_fn_t* change_color_fn) {
+  if (!change_color_fn) {
+    return false;
+  }
+  if (cp[0] != '\033' || cp[1] != '[') {
+    return false;
+  }
+  int off = 2;
+  int val = 0;
+  while (isdigit(cp[off])) {
+    val = val * 10 + (cp[off] - '0');
+    ++off;
+  }
+  if (cp[off] == 'm') {
+    change_color_fn(val);
+    cp += off + 1;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 // internal implementation of vprintf
-int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn) {
+int vprintf_int(const char*fmt, va_list va, putchar_fn_t* putchar_fn, change_color_fn_t* change_color_fn) {
   int percent_mode = 0;
   for (const char* cp = fmt; *cp; ++cp) {
+    if (handle_color_sequence(cp, change_color_fn)) {
+      --cp; // cancel the ++cp
+      continue;
+    }
     char ch = *cp;
     if (ch == '%') {
       if (percent_mode) {
