@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <vector.h>
 #include <algorithm.h>
+#include <stdlib.h>
 
 #define TEST_VECTOR 0
 #if TEST_VECTOR
@@ -61,8 +62,36 @@ void test_sort() {
 void test_sort() { }
 #endif
 
+#define TEST_RAND 0
+#if TEST_RAND
+// NOTE even though we use floating point numbers here in kernel, SOS does not
+// support floating point in user space yet.
+void test_rand() {
+  srand(41);
+  int count = 1000000;
+  int inside = 0;
+  for (int i = 0; i < count; ++i) {
+    float x = rand01(), y = rand01();
+    if (x * x + y * y <= 1.0f) {
+      ++inside;
+    }
+  }
+  float pi = (float) inside / count * 4;
+  #if 0
+  printf("pi is %f\n", pi);
+  #else
+  // TODO: support %f
+  printf("pix1000000 is %d\n", (int)(pi * 1000000));
+  #endif
+  assert((int) (pi * 100) == 314);
+}
+#else
+void test_rand() { }
+#endif
+
 void test_kernel() {
   test_vector();
   test_malloc();
   test_sort();
+  test_rand();
 }

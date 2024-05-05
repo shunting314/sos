@@ -2,6 +2,7 @@
 #pragma once
 
 #include <assert.h>
+#include <stdlib.h>
 #include <kernel/usb/usb_device.h>
 
 #define CBW_SIGNATURE 0x43425355 // 'USBC' in little endian
@@ -60,7 +61,12 @@ struct CommandStatusWrapper {
 
 static_assert(sizeof(CommandStatusWrapper) == 13);
 
-#define FIXED_TAG 0x06180618
+// #define FIXED_TAG 0x06180618
+#ifdef FIXED_TAG
+#define GENERATE_TAG FIXED_TAG
+#else
+#define GENERATE_TAG rand()
+#endif
 
 // TODO: instead of using template, use a controller driver base class
 template <typename ControllerDriver>
@@ -104,7 +110,7 @@ class MassStorageDevice : public USBDevice<ControllerDriver> {
    */
   void handleInCommand(uint8_t* cmdptr, int cmdlen, uint8_t* payloadPtr, int payloadLen) {
     CommandBlockWrapper cbw(
-      FIXED_TAG,
+      GENERATE_TAG,
       payloadLen,
       true, // in request
       cmdlen,
@@ -124,7 +130,7 @@ class MassStorageDevice : public USBDevice<ControllerDriver> {
    */
   void handleOutCommand(uint8_t* cmdptr, int cmdlen, const uint8_t* payloadPtr, int payloadLen) {
     CommandBlockWrapper cbw(
-      FIXED_TAG,
+      GENERATE_TAG,
       payloadLen,
       false, // out request
       cmdlen,

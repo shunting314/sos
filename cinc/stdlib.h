@@ -84,4 +84,14 @@ void free(void* ptr);
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+uint32_t rand();
+float rand01();
+void srand(int s);
+#ifdef __cplusplus
+}
+#endif
+
 #endif
