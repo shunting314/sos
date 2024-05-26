@@ -14,6 +14,7 @@ include/linux/device.h
 
 include/linux/dma-direct.h
 - `struct bus_dma_region`
+- `dma_capable`
 - `translate_dma_to_phys`
 - `translate_phys_to_dma`
 
@@ -35,6 +36,9 @@ include/linux/etherdevice.h
 include/linux/ieee80211.h
 - `struct ieee80211_hdr`
 
+include/linux/swiotlb.h
+- `struct io_tlb_mem`
+
 include/linux/list.h
 - `INIT_LIST_HEAD`
 - `__list_add`
@@ -44,6 +48,9 @@ include/linux/list.h
 - `list_del`
 - `__list_del_entry`
 - `list_del_init`
+
+include/linux/minmax.h
+- `min_not_zero`
 
 include/linux/mm.h
 - `offset_in_page`
@@ -57,6 +64,10 @@ include/linux/netdevice.h
 include/linux/pci.h
 - `struct pci_dev`
 
+include/linux/pfn.h
+- `PFH_PHYS`
+- `PHYS_PFN`
+
 include/linux/printk.h
 - printk
 
@@ -64,9 +75,16 @@ include/linux/skbuff.h
 - `dev_alloc_skb`
 - `netdev_alloc_skb`
 - `struct sk_buff`
+- `struct sk_buff_head`
+- `__skb_dequeue`
+- `__skb_insert`
+- `skb_peek`
 - `skb_put_data`
 - `skb_reserve`
 - `skb_tail_pointer`
+- `__skb_queue_before`
+- `__skb_queue_tail`
+- `__skb_unlink`
 
 include/linux/types.h
 - `dma_addr_t`
@@ -82,6 +100,13 @@ include/net/mac80211.h
 
 kernel/dma/direct.h
 - `dma_direct_map_page`
+- `dma_direct_unmap_page`
+
+kernel/dma/swiotlb.c
+- `swiotlb_bounce`
+- `swiotlb_map`
+- `swiotlb_tbl_map_single`
+- `swiotlb_tbl_unmap_single`
 
 kernel/dma/mapping.c
 - `dma_map_page_attrs`
@@ -98,6 +123,7 @@ lib/vsprintf.c
 
 net/core/skbuff.c
 - `__netdev_alloc_skb`
+- `skb_dequeue`
 - `skb_put`
 
 net/mac80211/rx.c

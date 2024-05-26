@@ -26,6 +26,11 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [MSDU](https://en.wikipedia.org/wiki/MAC_service_data_unit)
 - [Frame aggregation](https://en.wikipedia.org/wiki/Frame_aggregation)
 - [WPA](https://en.wikipedia.org/wiki/Wi-Fi_Protected_Access): WEP has been deprecated by WPA/WPA2/WPA3.
+- [linux dma doc](https://www.kernel.org/doc/Documentation/DMA-API-HOWTO.txt): we may need convert physical address to dma address if the mapping between them is not an identity mapping.
+- [iommu - wikipedia](https://en.wikipedia.org/wiki/Input%E2%80%93output_memory_management_unit)
+- [printk formats in linux](https://www.kernel.org/doc/Documentation/printk-formats.txt): in kernel %p by default will hash the pointer. Use %px to print the original address.
+- [IOMMU SWIOTLB](https://wiki.gentoo.org/wiki/IOMMU_SWIOTLB): from this article, we can think SWIOTLB as a software version of hardware IOMMU. SWIOTLB is more flexible than IOMMU.
+- [A more dynamic software I/O TLB - lwn](https://lwn.net/Articles/940973/): Some devices can only access low address memory. With SWIOTLB, buffers are reserved in low address. For memory that a device can not access, a buffer from low memory need to be obtained for the device to access and data need to be 'bounced' between these 2 memory spaces.
 
 # Note
 
@@ -48,8 +53,13 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
   - change all callbacks used in `_rtl_init_deferred_work` to dummy return function
   - change `rtl_op_bss_info_changed`, `rtl_op_stop` to dummy return
 
-- change `rtl_op_remove_interface` to dummy return cause wifi not work!
+- Linux wifi STOP working after making the following changes:
+  - change `rtl_op_remove_interface` to dummy
+  - comment out the call to `rtl88e_phy_set_bw_mode_callback`
 
 - `ieee80211_is_action`: return true if the frame is an action frame. Action frame
    is a kind of management frame.
 
+- Verified on my toshiba, `rtl_op_sta_add` is called to add the associated AP. The printed mac address is the AP's rather than my laptop's.
+
+- When running debian on my toshiba, using swiotlb is necessary since the host has 6GB memory while the wifi adaptor can only access the low 4GB.
