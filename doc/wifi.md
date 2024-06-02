@@ -31,6 +31,10 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - [printk formats in linux](https://www.kernel.org/doc/Documentation/printk-formats.txt): in kernel %p by default will hash the pointer. Use %px to print the original address.
 - [IOMMU SWIOTLB](https://wiki.gentoo.org/wiki/IOMMU_SWIOTLB): from this article, we can think SWIOTLB as a software version of hardware IOMMU. SWIOTLB is more flexible than IOMMU.
 - [A more dynamic software I/O TLB - lwn](https://lwn.net/Articles/940973/): Some devices can only access low address memory. With SWIOTLB, buffers are reserved in low address. For memory that a device can not access, a buffer from low memory need to be obtained for the device to access and data need to be 'bounced' between these 2 memory spaces.
+- [limit the amount of memory the system can use](https://stackoverflow.com/questions/13484016/setting-limit-to-total-physical-memory-available-in-linux) 
+  - Even though my toshiba laptop has 6G memory, adding kernel cmdline parameter
+    can force the system to use less than 4G memory. Thus no swiotlb would be
+    necessary since all the memory is addressable by the wifi adaptor.
 
 # Note
 

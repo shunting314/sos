@@ -38,6 +38,7 @@ include/linux/ieee80211.h
 
 include/linux/swiotlb.h
 - `struct io_tlb_mem`
+- `is_swiotlb_buffer`
 
 include/linux/list.h
 - `INIT_LIST_HEAD`
