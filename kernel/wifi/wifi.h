@@ -68,6 +68,7 @@ struct ieee80211_hdr {
   uint16_t order : 1;
 
   uint16_t duration_id;
+  // dest, src, bssid
   macaddr_t addr1, addr2, addr3;
   uint16_t seq_ctl; // sequence control
 } __attribute__((packed));

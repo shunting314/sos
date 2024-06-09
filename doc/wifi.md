@@ -35,6 +35,7 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
   - Even though my toshiba laptop has 6G memory, adding kernel cmdline parameter
     can force the system to use less than 4G memory. Thus no swiotlb would be
     necessary since all the memory is addressable by the wifi adaptor.
+- [`EXPORT_SYMBOL`](https://lkw.readthedocs.io/en/latest/doc/04_exporting_symbols.html)
 
 # Note
 
@@ -67,3 +68,5 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 - Verified on my toshiba, `rtl_op_sta_add` is called to add the associated AP. The printed mac address is the AP's rather than my laptop's.
 
 - When running debian on my toshiba, using swiotlb is necessary since the host has 6GB memory while the wifi adaptor can only access the low 4GB.
+
+- Note there are 3 layers of kernel modules involved for rtl8188ee: module rtl8188ee, module `rtl_pci`/`rtl_usb` and module `rtlwifi`. The former layers depends on later layers. These dependencies need to be kept in mind. If you export a symbol in module rtl8188ee and use that symbol in module `rtl_pci`, something like a circular dependencies will happen. Even if the kernel can be built without error, at runtime something will go wrong and some modules may just not work!

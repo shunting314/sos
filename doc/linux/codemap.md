@@ -22,6 +22,8 @@ include/linux/dma-map-ops.h
 - `get_dma_ops`
 
 include/linux/dma-mapping.h
+- `dma_alloc_coherent`
+- `dma_free_coherent`
 - `dma_map_single`
 - `dma_map_single_attrs`
 - `dma_unmap_single`
@@ -32,6 +34,10 @@ include/linux/etherdevice.h
 - `is_multicast_ether_addr`
 - `is_unicast_ether_addr`
 - `is_zero_ether_addr`
+
+include/linux/export.h
+- `EXPORT_SYMBOL`
+- `EXPORT_SYMBOL_GPL`
 
 include/linux/ieee80211.h
 - `struct ieee80211_hdr`
@@ -110,6 +116,8 @@ kernel/dma/swiotlb.c
 - `swiotlb_tbl_unmap_single`
 
 kernel/dma/mapping.c
+- `dma_alloc_attrs`
+- `dma_free_attrs`
 - `dma_map_page_attrs`
 - `dma_unmap_page_attrs`
 
