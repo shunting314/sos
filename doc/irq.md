@@ -4,6 +4,8 @@ Vector offset can be set during initialization. According to '8259 wiki on osdev
 # Reference
 
 - [Intel 8259A Spec](https://pdos.csail.mit.edu/6.828/2010/readings/hardware/8259A.pdf)
+  - I roughly read the spec. I'm able to find how IRQ remap and explict EOI
+    works by reading the spec.
 - [IRQ doc](https://en.wikipedia.org/wiki/Interrupt_request_(PC_architecture))
 - [Programmable Interrupt Controller](https://en.wikipedia.org/wiki/Programmable_interrupt_controller)
 - [Intel 8259](https://en.wikipedia.org/wiki/Intel_8259)
