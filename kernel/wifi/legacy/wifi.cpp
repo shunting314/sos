@@ -156,13 +156,31 @@ struct TxDesc {
 };
 
 class Rtl88eeDriver;
-struct RxRing {
+struct TxRing {
   TxDesc* desc_list = nullptr;
-  int idx = 0;
+  int idx = 0; // transmission index
   int num_desc = -1;
+  int reclaim_idx = 0; // reclaim index
 
   void transmit_frame(Rtl88eeDriver& driver, uint8_t *frame_buf, uint32_t len);
+  void reclaim_done_frames(Rtl88eeDriver& driver);
 };
+
+void TxRing::reclaim_done_frames(Rtl88eeDriver& driver) {
+  while (reclaim_idx < idx) {
+    TxDesc &desc = desc_list[reclaim_idx];
+    if (desc.own) {
+      break;
+    }
+
+    // hardware is done with this descriptor
+    printf("Reclaim TxDesc %d\n", reclaim_idx);
+    free_phys_page(desc.txbufferaddr);
+    desc.txbufferaddr = 0;
+
+    ++reclaim_idx;
+  }
+}
 
 // linux defines 9 tx rings
 // - BEACON_QUEUE has size 2;
@@ -171,7 +189,7 @@ struct RxRing {
 TxDesc tx_ring_beacon[2] __attribute__((aligned(256)));
 TxDesc tx_ring_mgmt_txdescs[128] __attribute__((aligned(256)));
 
-RxRing tx_mgmt_ring = {
+TxRing tx_mgmt_ring = {
   .desc_list = tx_ring_mgmt_txdescs,
   .idx = 0,
   .num_desc = sizeof(tx_ring_mgmt_txdescs) / sizeof(*tx_ring_mgmt_txdescs)
@@ -298,6 +316,59 @@ class Rtl88eeDriver {
   PCIFunction func_;
   Bar membar_;
 };
+
+void TxRing::transmit_frame(Rtl88eeDriver& driver, uint8_t *frame_buf, uint32_t len) {
+  assert(idx < num_desc);
+  TxDesc& txdesc = desc_list[idx++];
+  assert(!txdesc.own);
+  assert(!txdesc.txbufferaddr); // the buffer should have already been freed and the field should have already been set to 0
+
+  // clear the txdesc upto next_desc_address first
+  memset(&txdesc, 0, 40); // TODO don't hardcode 40 here
+
+  uint8_t *page_buf = (uint8_t*) alloc_phys_page(); // TODO avoid allocating an entire page
+  assert(len <= PAGE_SIZE);
+  memmove(page_buf, frame_buf, len);
+
+  txdesc.offset = 32; // TODO: this follows linux call set_tx_desc_offset
+  txdesc.txrate = DESC92C_RATE2M; // XXX I just pick an arbitrary that looks reasonable.
+  txdesc.shortgi = 0;
+
+  struct ieee80211_hdr* hdr = (struct ieee80211_hdr*) page_buf;
+  int seq_number = hdr->seq_ctl >> 4;
+  txdesc.seq = seq_number;
+  txdesc.pktsize = len;
+  int fw_qsel = QSLT_MGNT;
+  txdesc.queuesel = fw_qsel;
+  txdesc.txrate_fb_lmt = 0x1F;
+  txdesc.rtsrate_fb_lmt = 0xF;
+  txdesc.firstseg = txdesc.lastseg = 1;
+  txdesc.txbuffersize = len;
+  txdesc.txbufferaddr = (uint32_t) page_buf;
+ 
+  #if 0
+  // These lines are from linux. After commenting them from linux,
+  // wifi still works. So it should not be critical. It does not bother
+  // to do the same thing in SOS.
+  if (rtlpriv->dm.useramask) {
+    set_tx_desc_rate_id(pdesc, ptcb_desc->ratr_index);
+    set_tx_desc_macid(pdesc, ptcb_desc->mac_id);
+  } else {
+    set_tx_desc_rate_id(pdesc, 0xC + ptcb_desc->ratr_index);
+    set_tx_desc_macid(pdesc, ptcb_desc->ratr_index);
+  }
+  #endif
+
+  // set the own bit to 1 in the end
+  txdesc.own = 1;
+
+  uint32_t hw_queue = MGNT_QUEUE; // TODO avoid hardcoding
+  // Writing to REG_PCIE_CTRL_REG is very critical so that the hw will process
+  // the tx desc and mark the own bit to 0!
+  driver.write_nic_reg16(REG_PCIE_CTRL_REG, 1 << hw_queue);
+}
+
+
 
 uint32_t Rtl88eeDriver::initializeRxRing() {
   uint32_t ret = (uint32_t) rx_ring;
@@ -1708,22 +1779,22 @@ void wifi_irq_handler_recv(Rtl88eeDriver& driver) {
     }
     driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
 
-    assert(desc->pkt_len > 32);
     handle_received_buffer(desc, (uint8_t*) desc->buff_addr, desc->pkt_len);
   }
 }
 
+void wifi_irq_handler_send(Rtl88eeDriver& driver, int queue_idx) {
+  assert(queue_idx == MGNT_QUEUE);
+  tx_mgmt_ring.reclaim_done_frames(driver);
+}
+
 Rtl88eeDriver* driver_ptr = nullptr;
 
-uint32_t irq_cnt = 0;
 void wifi_irq_handler(void) {
-  printf("+++ Got an interrupt from the adapter %d\n", irq_cnt++);
   assert(driver_ptr);
   Rtl88eeDriver& driver = *driver_ptr;
+  bool handled = false;
 
-  #if 0
-  asm volatile("cli");
-  #endif
   driver_ptr->disable_interrupt();
 
   uint32_t inta = driver.read_nic_reg(ISR) & driver.irq_mask[0];
@@ -1732,14 +1803,19 @@ void wifi_irq_handler(void) {
   uint32_t intb = driver.read_nic_reg(REG_HISRE) & driver.irq_mask[1];
   driver.write_nic_reg(REG_HISRE, intb);
 
-  printf("= in wifi_irq_handler:inta 0x%x, intb 0x%x\n", inta, intb);
   if (inta & IMR_ROK) {
+    handled = true;
     wifi_irq_handler_recv(driver);
   }
+  if (inta & IMR_MGNTDOK) {
+    handled = true;
+    wifi_irq_handler_send(driver, MGNT_QUEUE);
+  }
 
-  #if 0
-  asm volatile("sti");
-  #endif
+  if (!handled) {
+    printf("Unhandled interrupt in wifi_irq_handler: inta 0x%x, intb 0x%x\n", inta, intb);
+    // assert(false);
+  }
   driver_ptr->enable_interrupt();
 }
 
@@ -1936,6 +2012,21 @@ void phy_set_bw_mode(Rtl88eeDriver& driver) {
   phy_rf6052_set_bandwidth(driver, current_chan_bw);
 }
 
+void switch_channel(Rtl88eeDriver& driver, int channel) {
+  driver.current_channel = channel;
+
+  // switch_channel
+  phy_sw_chnl(driver);
+
+  // set_channel_access
+  update_channel_access_setting(driver);
+
+  // set_bw_mode
+  phy_set_bw_mode(driver);
+
+  msleep(5);
+}
+
 // follow rtl_op_config in linux. Call this since I see related logs in dmesg
 // on debian.
 void rtl_op_config(Rtl88eeDriver& driver) {
@@ -1946,16 +2037,7 @@ void rtl_op_config(Rtl88eeDriver& driver) {
   {
     driver.current_channel = 10; // XXX for testing. My wifi uses this channel
   #endif
-    // switch_channel
-    phy_sw_chnl(driver);
-
-    // set_channel_access
-    update_channel_access_setting(driver);
-
-    // set_bw_mode
-    phy_set_bw_mode(driver);
-
-    msleep(5);
+    switch_channel(driver, driver.current_channel);
   }
 }
 
@@ -2094,88 +2176,18 @@ void wifi_init() {
 
   uint8_t probe_request_buf[256];
   int len = create_probe_request(probe_request_buf, sizeof(probe_request_buf));
-  #if 0
+  #if 1
   printf("Create a proble request:\n");
   hexdump(probe_request_buf, len);
   #endif
 
   // send the probe request with the tx management ring
-  printf("before transmit tx own %d\n", tx_mgmt_ring.desc_list[0].own);
   tx_mgmt_ring.transmit_frame(driver, probe_request_buf, len);
 
-  int print_cnt_tx_own = 0;
   // waiting for interrupts
   for (int itr = 0; ; ++itr) {
-    // TODO: why there are no further interrupts triggerred???
-    RxDesc* desc = &rx_ring[driver.rxidx];
-    if (!desc->own) {
-      if (desc->pkt_len > 32) {
-        handle_received_buffer(desc, (uint8_t*) desc->buff_addr, desc->pkt_len);
-        driver.rxidx = (driver.rxidx + 1) % RTL_PCI_MAX_RX_COUNT;
-      } else {
-        // TODO why this happen in practice?
-        // assert(desc->pkt_len > 32);
-      }
-    }
-
-    if (itr % 100 == 0) {
-      if (print_cnt_tx_own++ < 2) {
-        printf("tx own %d\n", tx_mgmt_ring.desc_list[0].own);
-      }
-    }
     msleep(10);
   }
 
   safe_assert(false && "wifi_init halt");
-}
-
-void RxRing::transmit_frame(Rtl88eeDriver& driver, uint8_t *frame_buf, uint32_t len) {
-  assert(idx < num_desc);
-  TxDesc& txdesc = desc_list[idx++];
-  assert(!txdesc.own);
-  assert(!txdesc.txbufferaddr); // the buffer should have already been freed and the field should have already been set to 0
-
-  // clear the txdesc upto next_desc_address first
-  memset(&txdesc, 0, 40); // TODO don't hardcode 40 here
-
-  uint8_t *page_buf = (uint8_t*) alloc_phys_page(); // TODO avoid allocating an entire page
-  assert(len <= PAGE_SIZE);
-  memmove(page_buf, frame_buf, len);
-
-  txdesc.offset = 32; // TODO: this follows linux call set_tx_desc_offset
-  txdesc.txrate = DESC92C_RATE2M; // XXX I just pick an arbitrary that looks reasonable.
-  txdesc.shortgi = 0;
-
-  struct ieee80211_hdr* hdr = (struct ieee80211_hdr*) page_buf;
-  int seq_number = hdr->seq_ctl >> 4;
-  txdesc.seq = seq_number;
-  txdesc.pktsize = len;
-  int fw_qsel = QSLT_MGNT;
-  txdesc.queuesel = fw_qsel;
-  txdesc.txrate_fb_lmt = 0x1F;
-  txdesc.rtsrate_fb_lmt = 0xF;
-  txdesc.firstseg = txdesc.lastseg = 1;
-  txdesc.txbuffersize = len;
-  txdesc.txbufferaddr = (uint32_t) page_buf;
- 
-  #if 0
-  // These lines are from linux. After commenting them from linux,
-  // wifi still works. So it should not be critical. It does not bother
-  // to do the same thing in SOS.
-  if (rtlpriv->dm.useramask) {
-    set_tx_desc_rate_id(pdesc, ptcb_desc->ratr_index);
-    set_tx_desc_macid(pdesc, ptcb_desc->mac_id);
-  } else {
-    set_tx_desc_rate_id(pdesc, 0xC + ptcb_desc->ratr_index);
-    set_tx_desc_macid(pdesc, ptcb_desc->ratr_index);
-  }
-  #endif
-
-  // set the own bit to 1 in the end
-  txdesc.own = 1;
-
-  uint32_t hw_queue = MGNT_QUEUE; // TODO avoid hardcoding
-  // Writing to REG_PCIE_CTRL_REG is very critical so that the hw will process
-  // the tx desc and mark the own bit to 0!
-  driver.write_nic_reg16(REG_PCIE_CTRL_REG, 1 << hw_queue);
 }

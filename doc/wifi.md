@@ -71,3 +71,4 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
 
 - Note there are 3 layers of kernel modules involved for rtl8188ee: module rtl8188ee, module `rtl_pci`/`rtl_usb` and module `rtlwifi`. The former layers depends on later layers. These dependencies need to be kept in mind. If you export a symbol in module rtl8188ee and use that symbol in module `rtl_pci`, something like a circular dependencies will happen. Even if the kernel can be built without error, at runtime something will go wrong and some modules may just not work!
 
+

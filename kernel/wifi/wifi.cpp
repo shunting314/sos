@@ -30,6 +30,7 @@ bool register_found_bss(macaddr_t addr, const char* name, int len) {
 
 int n_too_small_frame = 0;
 int n_probe_request = 0;
+int n_probe_response = 0;
 int n_management_action = 0;
 
 int n_data_frame_data = 0;
@@ -86,6 +87,17 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
       hexdump(frame_buf, buflen);
     }
     #endif
+  } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_PROBE_RESPONSE) {
+    if (n_probe_response < 2) {
+      printf("+ Received a probe response. #%d, len %d\n", n_probe_response++, buflen);
+      // bss id
+      printf(" addr1: "); hdr->addr1.print(); printf("\n");
+      printf(" addr2: "); hdr->addr2.print(); printf("\n");
+      printf(" bssid: "); hdr->addr3.print(); printf("\n");
+
+      // hexdump(frame_buf, buflen);
+      // TODO: parse the probe response..
+    }
   } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_ACTION) {
     if (n_management_action < 5) {
       printf("Received a management action frame. #%d\n", n_management_action++);
@@ -97,7 +109,7 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
     }
     #endif
   } else {
-    printf("Received a non-beacon frame type %d, subtype %d\n", hdr->type, hdr->subtype);
+    printf("Received a unrecognized frame type %d, subtype %d\n", hdr->type, hdr->subtype);
   }
   // hexdump(frame_buf, min(buflen, 256));
 }
