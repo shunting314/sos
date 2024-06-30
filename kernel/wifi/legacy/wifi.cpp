@@ -2184,6 +2184,17 @@ void wifi_init() {
   // send the probe request with the tx management ring
   tx_mgmt_ring.transmit_frame(driver, probe_request_buf, len);
 
+  uint8_t auth_request_buf[256];
+  extern int nbss_meta;
+  while (nbss_meta == 0) {
+    msleep(10); // wait a bit to ensure we get AP's mac
+  }
+  len = create_authentication_frame(auth_request_buf, sizeof(auth_request_buf));
+  printf("Create a authentication request:\n");
+  hexdump(auth_request_buf, len);
+
+  tx_mgmt_ring.transmit_frame(driver, auth_request_buf, len);
+
   // waiting for interrupts
   for (int itr = 0; ; ++itr) {
     msleep(10);

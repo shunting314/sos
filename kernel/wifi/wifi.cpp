@@ -28,12 +28,58 @@ bool register_found_bss(macaddr_t addr, const char* name, int len) {
   return true;
 }
 
+macaddr_t get_wireless_network_mac() {
+  static macaddr_t ap_mac;
+  if (!ap_mac.is_allzero()) {
+    return ap_mac;
+  }
+
+  // slow path. find the mac address
+  const char* target_net_name = get_wireless_network_name();
+  int found_idx = -1;
+  for (int i = 0; i < nbss_meta; ++i) {
+    if (strcmp(target_net_name, bss_meta_list[i].name) == 0) {
+      found_idx = i;
+      break;
+    }
+  }
+  assert(found_idx >= 0);
+  ap_mac = bss_meta_list[found_idx].bssid;
+  return ap_mac;
+}
+
+/*
+ * beacon and probe response have the same format. Thus share a dump
+ * function.
+ */
+void dump_beacon_or_probe_response(uint8_t *frame_buf, uint32_t len) {
+  ieee80211_hdr* hdr = (ieee80211_hdr*) frame_buf;
+  // bss id
+  printf(" addr1: "); hdr->addr1.print(); printf("\n");
+  printf(" addr2: "); hdr->addr2.print(); printf("\n");
+  assert(hdr->addr2 == hdr->addr3);
+  printf(" retry: %d\n", hdr->retry);
+
+  uint8_t *ptr = frame_buf + sizeof(*hdr) + sizeof(beacon_body);
+  int left = len - sizeof(*hdr) - sizeof(beacon_body);
+
+  while (left > FCS_LEN) {
+    assert(left - FCS_LEN >= ptr[1] + 2);
+    int toskip = ptr[1] + 2;
+    ptr += toskip;
+    left -= toskip;
+  }
+  assert(left == FCS_LEN);
+  printf("beacon/probe response is valid\n");
+}
+
 int n_too_small_frame = 0;
 int n_probe_request = 0;
 int n_probe_response = 0;
 int n_management_action = 0;
 
 int n_data_frame_data = 0;
+int n_authentication = 0;
 
 void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
   ieee80211_hdr* hdr = (ieee80211_hdr*) frame_buf;
@@ -56,8 +102,6 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
     uint8_t* ptr = frame_buf + sizeof(*hdr) + sizeof(beacon_body);
     int left = buflen - sizeof(*hdr) - sizeof(beacon_body);
     assert(left >= 0);
-
-    #define FCS_LEN 4
 
     // parse the information elements
     while (left > FCS_LEN) {
@@ -88,19 +132,22 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
     }
     #endif
   } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_PROBE_RESPONSE) {
-    if (n_probe_response < 2) {
+    #if 0
+    if (n_probe_response < 3) {
       printf("+ Received a probe response. #%d, len %d\n", n_probe_response++, buflen);
-      // bss id
-      printf(" addr1: "); hdr->addr1.print(); printf("\n");
-      printf(" addr2: "); hdr->addr2.print(); printf("\n");
-      printf(" bssid: "); hdr->addr3.print(); printf("\n");
-
-      // hexdump(frame_buf, buflen);
-      // TODO: parse the probe response..
+      dump_beacon_or_probe_response(frame_buf, buflen);
     }
+    #endif
   } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_ACTION) {
     if (n_management_action < 5) {
       printf("Received a management action frame. #%d\n", n_management_action++);
+    }
+  } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_AUTHENTICATION) {
+    if (n_authentication < 3) {
+      printf("Received an authentication frame. #%d\n", n_authentication++);
+      assert(buflen >= sizeof(ieee80211_hdr) + sizeof(authentication_body));
+      authentication_body *auth_body = (authentication_body *) (hdr + 1);
+      printf("algo %d, seq no %d, status code %d\n", auth_body->algorithm_number, auth_body->transaction_seqno, auth_body->status_code);
     }
   } else if (hdr->type == FRAME_TYPE_DATA && hdr->subtype == DATA_FRAME_DATA) {
     #if 0
@@ -109,10 +156,17 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
     }
     #endif
   } else {
-    printf("Received a unrecognized frame type %d, subtype %d\n", hdr->type, hdr->subtype);
+    printf("Received a unrecognized frame type %d, subtype %d, buflen %d\n", hdr->type, hdr->subtype, buflen);
+    hexdump(frame_buf, min(buflen, 256));
+    assert(false && "_parse_80211_frame hlt");
   }
   // hexdump(frame_buf, min(buflen, 256));
 }
+
+#define ADD_BYTE(val) do { \
+  assert(len < capability); \
+  buf[len++] = val; \
+} while(0)
 
 /*
  * Compose the probe request manually for now. But maybe we can build some utilities
@@ -120,11 +174,6 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
  */
 int create_probe_request(uint8_t* buf, int capability) {
   int len = 0;
-#define ADD_BYTE(val) do { \
-  assert(len < capability); \
-  buf[len++] = val; \
-} while(0)
-
   // frame control
   uint8_t protocol = 0;
   uint8_t type = FRAME_TYPE_MANAGEMENT;
@@ -184,5 +233,59 @@ int create_probe_request(uint8_t* buf, int capability) {
 
   // XXX The hardware will add the FCS?
   return len;
-#undef ADD_BYTE
 }
+
+int create_authentication_frame(uint8_t *buf, int capability) {
+  int len = 0;
+
+  // frame control
+  uint8_t protocol = 0;
+  uint8_t type = FRAME_TYPE_MANAGEMENT;
+  uint8_t subtype = MANAGEMENT_FRAME_AUTHENTICATION;
+  ADD_BYTE(protocol | (type << 2) | (subtype << 4));
+  ADD_BYTE(0);
+
+  // duration/id
+  ADD_BYTE(0);
+  ADD_BYTE(0);
+
+  // dst address
+  auto ap_mac = get_wireless_network_mac();
+  for (int i = 0; i < 6; ++i) {
+    ADD_BYTE(ap_mac.addr[i]);
+  }
+
+  // src address
+  assert(!is_all_zero_mac_addr(self_mac_addr));
+  for (int i = 0; i < 6; ++i) {
+    ADD_BYTE(self_mac_addr[i]);
+  }
+
+  // BSSID
+  for (int i = 0; i < 6; ++i) {
+    ADD_BYTE(ap_mac.addr[i]);
+  }
+
+  // sequence control
+  uint16_t fragment_id = 0;
+  uint16_t sequence_id = 0; // TODO: how should we manage sequence number increment?
+  uint16_t sequence_control = fragment_id | (sequence_id << 4);
+  // little endian
+  ADD_BYTE(sequence_control & 0xFF);
+  ADD_BYTE(sequence_control >> 8);
+
+  uint16_t algo_num = 0; // open system authentication
+  ADD_BYTE(algo_num & 0xFF);
+  ADD_BYTE(algo_num >> 8);
+
+  uint16_t seq_no = 1;
+  ADD_BYTE(seq_no & 0xFF);
+  ADD_BYTE(seq_no >> 8);
+
+  uint16_t status = 0; // not needed for authentication 'request'
+  ADD_BYTE(status & 0xFF);
+  ADD_BYTE(status >> 8);
+
+  return len;
+}
+#undef ADD_BYTE
