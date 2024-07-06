@@ -2195,6 +2195,20 @@ void wifi_init() {
 
   tx_mgmt_ring.transmit_frame(driver, auth_request_buf, len);
 
+  uint8_t association_request_buf[256];
+  len = create_association_request(association_request_buf, sizeof(association_request_buf));
+  printf("Create a association request:\n");
+  hexdump(association_request_buf, len);
+
+  tx_mgmt_ring.transmit_frame(driver, association_request_buf, len);
+
+  #if 0 // try to send an ARP request.. But we should not use tx_mgmt_ring since  it's for management frames?
+  uint8_t data_for_arp_buf[256];
+  len = create_data_frame_for_arp(data_for_arp_buf, sizeof(data_for_arp_buf));
+  printf("Create a data frame for arp:\n");
+  hexdump(data_for_arp_buf, len);
+  #endif
+
   // waiting for interrupts
   for (int itr = 0; ; ++itr) {
     msleep(10);

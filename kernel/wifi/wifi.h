@@ -14,10 +14,13 @@ enum {
 };
 
 enum {
+  MANAGEMENT_FRAME_ASSOCIATION_REQUEST = 0,
+  MANAGEMENT_FRAME_ASSOCIATION_RESPONSE = 1,
   MANAGEMENT_FRAME_PROBE_REQUEST = 4,
   MANAGEMENT_FRAME_PROBE_RESPONSE = 5,
   MANAGEMENT_FRAME_BEACON = 8,
   MANAGEMENT_FRAME_AUTHENTICATION = 11,
+  MANAGEMENT_FRAME_DEAUTHENTICATION = 12,
   MANAGEMENT_FRAME_ACTION = 13,
 };
 
@@ -135,8 +138,9 @@ struct bss_meta {
 bool register_found_bss(macaddr_t addr, const char* name, int len);
 // let the caller pass in the buffer instead of returning a allocated buffer
 // so we can save a memcpy later on.
-int create_probe_request(uint8_t* buf, int capability);
-int create_authentication_frame(uint8_t *buf, int capability);
+int create_probe_request(uint8_t* buf, int capacity);
+int create_authentication_frame(uint8_t *buf, int capacity);
+int create_association_request(uint8_t *buf, int capacity);
 
 #define MAC_ADDR_LEN 6
 extern uint8_t self_mac_addr[MAC_ADDR_LEN];

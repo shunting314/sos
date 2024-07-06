@@ -23,7 +23,8 @@ int printf(const char* fmt, ...) {
   va_list va;
   va_start(va, fmt);
 
-  return vprintf_int(fmt, va, vga_putchar, change_global_color);
+  int out = vprintf_int(fmt, va, vga_putchar, change_global_color);
+  return out;
 }
 
 int puts(const char *s) {

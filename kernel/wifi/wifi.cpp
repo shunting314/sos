@@ -6,6 +6,7 @@
 
 bss_meta bss_meta_list[32];
 int nbss_meta = 0;
+int assoc_id = -1;
 
 uint8_t self_mac_addr[MAC_ADDR_LEN];
 
@@ -80,6 +81,7 @@ int n_management_action = 0;
 
 int n_data_frame_data = 0;
 int n_authentication = 0;
+int n_assoc_response = 0;
 
 void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
   ieee80211_hdr* hdr = (ieee80211_hdr*) frame_buf;
@@ -149,9 +151,24 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
       authentication_body *auth_body = (authentication_body *) (hdr + 1);
       printf("algo %d, seq no %d, status code %d\n", auth_body->algorithm_number, auth_body->transaction_seqno, auth_body->status_code);
     }
+  } else if (hdr->type == FRAME_TYPE_MANAGEMENT && hdr->subtype == MANAGEMENT_FRAME_ASSOCIATION_RESPONSE) {
+    if (n_assoc_response < 3) {
+      printf("Received an association response. #%d\n", n_assoc_response++);
+      hexdump(frame_buf, min(buflen, 256));
+      int off = sizeof(ieee80211_hdr);
+      assert(off + 2 <= buflen);
+      uint16_t capability_info = *(uint16_t*) (frame_buf + off);
+      off += 2;
+      assert(off + 2 <= buflen);
+      uint16_t status_code = *(uint16_t*) (frame_buf + off);
+      off += 2;
+      assert(off + 2 < buflen);
+      assoc_id = *(uint16_t*) (frame_buf + off);
+      printf("capa info 0x%x, status code %d, assoc_id 0x%x\n", capability_info, status_code, assoc_id);
+    }
   } else if (hdr->type == FRAME_TYPE_DATA && hdr->subtype == DATA_FRAME_DATA) {
-    #if 0
-    if (n_data_frame_data < 5) {
+    #if 1
+    if (n_data_frame_data < 3) {
       printf("Received a data frame data subtype. #%d\n", n_data_frame_data++);
     }
     #endif
@@ -164,16 +181,85 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
 }
 
 #define ADD_BYTE(val) do { \
-  assert(len < capability); \
+  assert(len < capacity); \
   buf[len++] = val; \
 } while(0)
+
+int add_ssid(uint8_t *buf, int capacity, int len) {
+  ADD_BYTE(ELEMENT_ID_SSID);
+  const char* target_net_name = get_wireless_network_name();
+  ADD_BYTE(strlen(target_net_name));
+  for (int i = 0; target_net_name[i]; ++i) {
+    ADD_BYTE(target_net_name[i]);
+  }
+  return len;
+}
+
+int add_supported_rates(uint8_t *buf, int capacity, int len) {
+  // supported rates
+  // the unit is 500kbps
+  uint8_t supported_rates[] = {
+    2, // 1mbps
+    4, // 2mbps
+    11, // 5.5mbps
+    22, // 11mbps
+  };
+  ADD_BYTE(ELEMENT_ID_SUPPORTED_RATES);
+  ADD_BYTE(sizeof(supported_rates) / sizeof(*supported_rates));
+  for (int i = 0; i < sizeof(supported_rates) / sizeof(*supported_rates); ++i) {
+    ADD_BYTE(supported_rates[i]);
+  }
+  return len;
+}
+
+// only work for a management frame so far
+int create_ieee80211_hdr(uint8_t *buf, int capacity, int len, int subtype) {
+  // frame control
+  uint8_t protocol = 0;
+  uint8_t type = FRAME_TYPE_MANAGEMENT;
+  ADD_BYTE(protocol | (type << 2) | (subtype << 4));
+  ADD_BYTE(0);
+
+  // duration/id
+  ADD_BYTE(0);
+  ADD_BYTE(0);
+
+  // dst address
+  auto ap_mac = get_wireless_network_mac();
+  for (int i = 0; i < 6; ++i) {
+    ADD_BYTE(ap_mac.addr[i]);
+  }
+
+  // src address
+  assert(!is_all_zero_mac_addr(self_mac_addr));
+  for (int i = 0; i < 6; ++i) {
+    ADD_BYTE(self_mac_addr[i]);
+  }
+
+  // BSSID
+  for (int i = 0; i < 6; ++i) {
+    ADD_BYTE(ap_mac.addr[i]);
+  }
+
+  // sequence control
+  uint16_t fragment_id = 0;
+  uint16_t sequence_id = 0; // TODO: how should we manage sequence number increment?
+  uint16_t sequence_control = fragment_id | (sequence_id << 4);
+  // little endian
+  ADD_BYTE(sequence_control & 0xFF);
+  ADD_BYTE(sequence_control >> 8);
+
+  return len;
+}
 
 /*
  * Compose the probe request manually for now. But maybe we can build some utilities
  * to help composing an 802.11 frame.
  */
-int create_probe_request(uint8_t* buf, int capability) {
+int create_probe_request(uint8_t* buf, int capacity) {
   int len = 0;
+
+  // TODO: make create_ieee80211_hdr more generic and call it here.
   // frame control
   uint8_t protocol = 0;
   uint8_t type = FRAME_TYPE_MANAGEMENT;
@@ -210,69 +296,19 @@ int create_probe_request(uint8_t* buf, int capability) {
   ADD_BYTE(sequence_control >> 8);
 
   // SSID
-  ADD_BYTE(ELEMENT_ID_SSID);
-  const char* target_net_name = get_wireless_network_name();
-  ADD_BYTE(strlen(target_net_name));
-  for (int i = 0; target_net_name[i]; ++i) {
-    ADD_BYTE(target_net_name[i]);
-  }
+  len = add_ssid(buf, capacity, len);
 
   // supported rates
-  // the unit is 500kbps
-  uint8_t supported_rates[] = {
-    2, // 1mbps
-    4, // 2mbps
-    11, // 5.5mbps
-    22, // 11mbps
-  };
-  ADD_BYTE(ELEMENT_ID_SUPPORTED_RATES);
-  ADD_BYTE(sizeof(supported_rates) / sizeof(*supported_rates));
-  for (int i = 0; i < sizeof(supported_rates) / sizeof(*supported_rates); ++i) {
-    ADD_BYTE(supported_rates[i]);
-  }
+  len = add_supported_rates(buf, capacity, len);
 
-  // XXX The hardware will add the FCS?
+  // NOTE: The hardware will add the FCS. Software can skip it
   return len;
 }
 
-int create_authentication_frame(uint8_t *buf, int capability) {
+int create_authentication_frame(uint8_t *buf, int capacity) {
   int len = 0;
 
-  // frame control
-  uint8_t protocol = 0;
-  uint8_t type = FRAME_TYPE_MANAGEMENT;
-  uint8_t subtype = MANAGEMENT_FRAME_AUTHENTICATION;
-  ADD_BYTE(protocol | (type << 2) | (subtype << 4));
-  ADD_BYTE(0);
-
-  // duration/id
-  ADD_BYTE(0);
-  ADD_BYTE(0);
-
-  // dst address
-  auto ap_mac = get_wireless_network_mac();
-  for (int i = 0; i < 6; ++i) {
-    ADD_BYTE(ap_mac.addr[i]);
-  }
-
-  // src address
-  assert(!is_all_zero_mac_addr(self_mac_addr));
-  for (int i = 0; i < 6; ++i) {
-    ADD_BYTE(self_mac_addr[i]);
-  }
-
-  // BSSID
-  for (int i = 0; i < 6; ++i) {
-    ADD_BYTE(ap_mac.addr[i]);
-  }
-
-  // sequence control
-  uint16_t fragment_id = 0;
-  uint16_t sequence_id = 0; // TODO: how should we manage sequence number increment?
-  uint16_t sequence_control = fragment_id | (sequence_id << 4);
-  // little endian
-  ADD_BYTE(sequence_control & 0xFF);
-  ADD_BYTE(sequence_control >> 8);
+  len = create_ieee80211_hdr(buf, capacity, len, MANAGEMENT_FRAME_AUTHENTICATION);
 
   uint16_t algo_num = 0; // open system authentication
   ADD_BYTE(algo_num & 0xFF);
@@ -286,6 +322,24 @@ int create_authentication_frame(uint8_t *buf, int capability) {
   ADD_BYTE(status & 0xFF);
   ADD_BYTE(status >> 8);
 
+  return len;
+}
+
+int create_association_request(uint8_t *buf, int capacity) {
+  int len = 0;
+
+  len = create_ieee80211_hdr(buf, capacity, len, MANAGEMENT_FRAME_ASSOCIATION_REQUEST);
+
+  uint16_t capability_info = 1;
+  ADD_BYTE(capability_info & 0xFF);
+  ADD_BYTE(capability_info >> 8);
+
+  uint16_t listen_interval = 10;
+  ADD_BYTE(listen_interval & 0xFF);
+  ADD_BYTE(listen_interval >> 8);
+
+  len = add_ssid(buf, capacity, len);
+  len = add_supported_rates(buf, capacity, len);
   return len;
 }
 #undef ADD_BYTE
