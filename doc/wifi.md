@@ -36,6 +36,9 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
     can force the system to use less than 4G memory. Thus no swiotlb would be
     necessary since all the memory is addressable by the wifi adaptor.
 - [`EXPORT_SYMBOL`](https://lkw.readthedocs.io/en/latest/doc/04_exporting_symbols.html)
+- [An awesome slides about mac80211 in linux](https://wireless.wiki.kernel.org/_media/en/developers/documentation/mac80211.pdf)
+  - page 8 mentions that include/net/mac80211.h is the most important for driver authors. 'DOC: Calling mac80211 from interrupts' part of comment in this header metions about ACK the interrupt. It turns out to be critical to make rtl8188ee work!
+- [](include/net/mac80211.h): This is the most important mac80211 file for driver authors.
 
 # Note
 

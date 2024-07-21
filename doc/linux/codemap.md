@@ -42,6 +42,9 @@ include/linux/export.h
 include/linux/ieee80211.h
 - `struct ieee80211_hdr`
 
+include/linux/netfilter.h
+- `NF_HOOK`
+
 include/linux/swiotlb.h
 - `struct io_tlb_mem`
 - `is_swiotlb_buffer`
@@ -67,6 +70,7 @@ include/linux/mm.h
 
 include/linux/netdevice.h
 - `dev_kfree_skb_any`
+- `dev_queue_xmit`
 
 include/linux/pci.h
 - `struct pci_dev`
@@ -97,10 +101,15 @@ include/linux/types.h
 - `dma_addr_t`
 - `struct list_head`
 
+include/net/arp.h
+
 include/net/mac80211.h
 - `struct ieee80211_hw`
 - `struct ieee80211_ops`
 - `struct ieee80211_rx_status`
+
+`include/uapi/linux/if_arp.h`
+- struct arphdr
 
 `include/uapi/linux/if_ether.h`
 - `ETH_ALEN`
@@ -130,10 +139,24 @@ kernel/printk/printk.c
 lib/vsprintf.c
 - `ptr_to_id` # hash a pointer
 
+net/core/dev.c
+- `dev_qdisc_enqueue`
+- `__dev_queue_xmit`
+- `__dev_xmit_skb`
+- `netdev_core_pick_tx`
+- `netdev_pick_tx`
+
 net/core/skbuff.c
 - `__netdev_alloc_skb`
 - `skb_dequeue`
 - `skb_put`
+
+net/ipv4/arp.c
+- `arp_create`
+- `arp_send`
+- `arp_send_dst`
+- `arp_xmit`
+- `arp_xmit_finish`
 
 net/mac80211/rx.c
 - `ieee80211_rx_irqsafe`
