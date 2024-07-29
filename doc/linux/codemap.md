@@ -42,6 +42,9 @@ include/linux/export.h
 include/linux/ieee80211.h
 - `struct ieee80211_hdr`
 
+include/linux/net.h
+- `struct socket` # general BSD socket. Contains `struct sock *sk;`
+
 include/linux/netfilter.h
 - `NF_HOOK`
 
@@ -108,6 +111,9 @@ include/net/mac80211.h
 - `struct ieee80211_ops`
 - `struct ieee80211_rx_status`
 
+include/net/sock.h
+- `struct sock`
+
 `include/uapi/linux/if_arp.h`
 - struct arphdr
 
@@ -151,6 +157,18 @@ net/core/skbuff.c
 - `skb_dequeue`
 - `skb_put`
 
+net/core/sock.c
+- `sk_alloc`
+
+`net/ipv4/af_inet.c`
+- `inet_create` # create `struct sock` for the passed in `struct socket`. Also setup `sock->ops`.
+- `inet_family_ops`
+- `inet_init` # call `sock_register(&inet_family_ops)`
+- `__inet_stream_connect` # calls `sock->sk->sk_prot->connect`
+- `inet_stream_connect`
+- `inet_stream_ops`
+- `inetsw_array`
+
 net/ipv4/arp.c
 - `arp_create`
 - `arp_send`
@@ -158,5 +176,21 @@ net/ipv4/arp.c
 - `arp_xmit`
 - `arp_xmit_finish`
 
+`net/ipv4/tcp_ipv4.c`
+- `struct proto tcp_prot`
+- `tcp_v4_connect`
+
 net/mac80211/rx.c
 - `ieee80211_rx_irqsafe`
+
+net/socket.c
+- `sock_alloc` # `inode->i_ops` is setup to `&sockfs_inode_ops`
+- `__sock_create`
+- `sock_create`
+- `sock_register`
+- `__sys_connect`
+- `__sys_connect_file` # calls `sock->ops->connect`
+- `__sys_socket`
+- `__sys_socket_create`
+- `SYSCALL_DEFINE3(connect, ...)` # defines `sys_connect`
+- `SYSCALL_DEFINE3(socket, ...)` # defines `sys_socket`
