@@ -104,6 +104,11 @@ include/linux/types.h
 - `dma_addr_t`
 - `struct list_head`
 
+include/linux/workqueue.h
+- `create_workqueue`
+- `struct work_struct`
+- `queue_work`
+
 include/net/arp.h
 
 include/net/mac80211.h
@@ -141,6 +146,16 @@ kernel/panic.c
 
 kernel/printk/printk.c
 - `_printk`
+
+kernel/workqueue.c
+- `alloc_workqueue`
+- `create_worker`
+- `process_one_work`
+- `__queue_work`
+- `queue_work_on`
+- `struct worker_pool`
+- `struct workqueue_struct`
+- `worker_thread`
 
 lib/vsprintf.c
 - `ptr_to_id` # hash a pointer
@@ -180,8 +195,33 @@ net/ipv4/arp.c
 - `struct proto tcp_prot`
 - `tcp_v4_connect`
 
+`net/mac80211/driver-ops.h`
+- `drv_tx` # calls `local->ops->tx`
+
+`net/mac80211/ieee80211_i.h`
+- `ieee80211_tx_skb_tid_band`
+
+net/mac80211/main.c
+- `ieee80211_alloc_hw_nm` # register `ieee80211_scan_work`
+
 net/mac80211/rx.c
 - `ieee80211_rx_irqsafe`
+
+net/mac80211/scan.c
+- `ieee80211_scan_state_send_probe`
+- `ieee80211_scan_work` # `ieee80211_queue_delayed_work` is called. It seems to reschedule the work item
+- `ieee80211_send_scan_probe_req` # call `ieee80211_build_probe_req` & `ieee80211_tx_skb_tid_band`
+
+net/mac80211/tx.c
+- `ieee80211_queue_skb`
+- `__ieee80211_tx` # call `ieee80211_tx_frags`
+- `ieee80211_tx` # calls `ieee80211_queue_skb` & `__ieee80211_tx`
+- `ieee80211_tx_frags` # call `drv_tx`
+- `__ieee80211_tx_skb_tid_band`
+- `ieee80211_xmit`
+
+net/mac80211/util.c
+- `ieee80211_build_probe_req`
 
 net/socket.c
 - `sock_alloc` # `inode->i_ops` is setup to `&sockfs_inode_ops`
