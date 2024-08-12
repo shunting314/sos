@@ -163,7 +163,12 @@ void _parse_80211_frame(uint8_t* frame_buf, uint32_t buflen) {
       uint16_t status_code = *(uint16_t*) (frame_buf + off);
       off += 2;
       assert(off + 2 < buflen);
-      assoc_id = *(uint16_t*) (frame_buf + off);
+      if (assoc_id < 0) {
+        assoc_id = *(uint16_t*) (frame_buf + off);
+      } else {
+        // don't support re-associate yet.
+        assert(assoc_id == *(uint16_t*) (frame_buf + off));
+      }
       printf("capa info 0x%x, status code %d, assoc_id 0x%x\n", capability_info, status_code, assoc_id);
     }
   } else if (hdr->type == FRAME_TYPE_DATA && hdr->subtype == DATA_FRAME_DATA) {

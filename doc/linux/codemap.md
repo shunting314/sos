@@ -195,14 +195,22 @@ net/ipv4/arp.c
 - `struct proto tcp_prot`
 - `tcp_v4_connect`
 
+net/mac80211/cfg.c
+- `ieee80211_auth` # static
+
 `net/mac80211/driver-ops.h`
 - `drv_tx` # calls `local->ops->tx`
 
 `net/mac80211/ieee80211_i.h`
+- `ieee80211_tx_skb` # call `ieee80211_tx_skb_tid`
 - `ieee80211_tx_skb_tid_band`
 
 net/mac80211/main.c
 - `ieee80211_alloc_hw_nm` # register `ieee80211_scan_work`
+
+net/mac80211/mlme.c
+- `ieee80211_auth` # calls `ieee80211_send_auth`
+- `ieee80211_mgd_auth` # calls `ieee80211_auth` in the same file
 
 net/mac80211/rx.c
 - `ieee80211_rx_irqsafe`
@@ -218,19 +226,36 @@ net/mac80211/tx.c
 - `ieee80211_tx` # calls `ieee80211_queue_skb` & `__ieee80211_tx`
 - `ieee80211_tx_frags` # call `drv_tx`
 - `__ieee80211_tx_skb_tid_band`
+- `ieee80211_tx_skb_tid`
 - `ieee80211_xmit`
 
 net/mac80211/util.c
 - `ieee80211_build_probe_req`
+- `ieee80211_send_auth` # call `ieee80211_tx_skb`
 
 net/socket.c
 - `sock_alloc` # `inode->i_ops` is setup to `&sockfs_inode_ops`
 - `__sock_create`
 - `sock_create`
 - `sock_register`
+- `sock_sendmsg` # calls `sock_sendmsg_nosec`
+- `sock_sendmsg_nosec` # most likely calls `sock->ops->sendmsg`
 - `__sys_connect`
 - `__sys_connect_file` # calls `sock->ops->connect`
+- `____sys_sendmsg` # calls `sock_sendmsg`
+- `___sys_sendmsg` # copy msg from user mode to kernel mode and calls `____sys_sendmsg`
+- `__sys_sendmsg` # calls `___sys_sendmsg`
 - `__sys_socket`
 - `__sys_socket_create`
 - `SYSCALL_DEFINE3(connect, ...)` # defines `sys_connect`
+- `SYSCALL_DEFINE3(sendmsg, ...)` # defines `sys_sendmsg`
 - `SYSCALL_DEFINE3(socket, ...)` # defines `sys_socket`
+
+net/wireless/mlme.c
+- `cfg80211_mlme_auth` # calls `rdev_auth`
+
+net/wireless/nl80211.c
+- `nl80211_authenticate` # calls `cfg80211_mlme_auth`
+
+`net/wireless/rdev-ops.h`
+- `rdev_auth`

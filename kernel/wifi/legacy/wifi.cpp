@@ -186,20 +186,26 @@ void TxRing::reclaim_done_frames(Rtl88eeDriver& driver) {
 // - BEACON_QUEUE has size 2;
 // - BE_QUEUE has size 256;
 // - all others have size 128
-TxDesc tx_ring_beacon[2] __attribute__((aligned(256)));
-TxDesc tx_ring_mgmt_txdescs[128] __attribute__((aligned(256)));
+TxDesc tx_beacon_ring_descs[2] __attribute__((aligned(256)));
+TxDesc tx_mgmt_ring_descs[128] __attribute__((aligned(256)));
+TxDesc tx_vo_ring_descs[128] __attribute__((aligned(256)));
 
 TxRing tx_mgmt_ring = {
-  .desc_list = tx_ring_mgmt_txdescs,
+  .desc_list = tx_mgmt_ring_descs,
   .idx = 0,
-  .num_desc = sizeof(tx_ring_mgmt_txdescs) / sizeof(*tx_ring_mgmt_txdescs)
+  .num_desc = sizeof(tx_mgmt_ring_descs) / sizeof(*tx_mgmt_ring_descs)
 };
 
-TxDesc tx_ring_voq[128] __attribute__((aligned(256)));
-TxDesc tx_ring_viq[128] __attribute__((aligned(256)));
-TxDesc tx_ring_beq[256] __attribute__((aligned(256)));
-TxDesc tx_ring_bkq[128] __attribute__((aligned(256)));
-TxDesc tx_ring_hq[128] __attribute__((aligned(256)));
+TxRing tx_vo_ring = {
+  .desc_list = tx_vo_ring_descs,
+  .idx = 0,
+  .num_desc = sizeof(tx_vo_ring_descs) / sizeof(*tx_vo_ring_descs)
+};
+
+TxDesc tx_vi_ring_descs[128] __attribute__((aligned(256)));
+TxDesc tx_be_ring_descs[256] __attribute__((aligned(256)));
+TxDesc tx_bk_ring_descs[128] __attribute__((aligned(256)));
+TxDesc tx_high_ring_descs[128] __attribute__((aligned(256)));
 
 static_assert(sizeof(TxDesc) == 64);
 
@@ -738,13 +744,13 @@ void init_mac(Rtl88eeDriver& driver) {
 
   driver.write_nic_reg(REG_RX_DESA, driver.initializeRxRing());
 #define INIT_TX_RING(tx_ring) driver.initializeTxRing(tx_ring, sizeof(tx_ring) / sizeof(tx_ring[0]))
-  driver.write_nic_reg(REG_BCNQ_DESA, INIT_TX_RING(tx_ring_beacon));
-  driver.write_nic_reg(REG_MGQ_DESA, INIT_TX_RING(tx_ring_mgmt_txdescs));
-  driver.write_nic_reg(REG_VOQ_DESA, INIT_TX_RING(tx_ring_voq));
-  driver.write_nic_reg(REG_VIQ_DESA, INIT_TX_RING(tx_ring_viq));
-  driver.write_nic_reg(REG_BEQ_DESA, INIT_TX_RING(tx_ring_beq));
-  driver.write_nic_reg(REG_BKQ_DESA, INIT_TX_RING(tx_ring_bkq));
-  driver.write_nic_reg(REG_HQ_DESA, INIT_TX_RING(tx_ring_hq));
+  driver.write_nic_reg(REG_BCNQ_DESA, INIT_TX_RING(tx_beacon_ring_descs));
+  driver.write_nic_reg(REG_MGQ_DESA, INIT_TX_RING(tx_mgmt_ring_descs));
+  driver.write_nic_reg(REG_VOQ_DESA, INIT_TX_RING(tx_vo_ring_descs));
+  driver.write_nic_reg(REG_VIQ_DESA, INIT_TX_RING(tx_vi_ring_descs));
+  driver.write_nic_reg(REG_BEQ_DESA, INIT_TX_RING(tx_be_ring_descs));
+  driver.write_nic_reg(REG_BKQ_DESA, INIT_TX_RING(tx_bk_ring_descs));
+  driver.write_nic_reg(REG_HQ_DESA, INIT_TX_RING(tx_high_ring_descs));
 #undef INIT_TX_RING
 
   driver.write_nic_reg(REG_INT_MIG, 0);
@@ -2202,11 +2208,15 @@ void wifi_init() {
 
   tx_mgmt_ring.transmit_frame(driver, association_request_buf, len);
 
-  #if 0 // try to send an ARP request.. But we should not use tx_mgmt_ring since  it's for management frames?
+  #if 0
+  // try to send an ARP request on the VO ring
+  // Pick VO ring since the first 3 data frame sent by linux is on
+  // VO ring.
   uint8_t data_for_arp_buf[256];
   len = create_data_frame_for_arp(data_for_arp_buf, sizeof(data_for_arp_buf));
   printf("Create a data frame for arp:\n");
   hexdump(data_for_arp_buf, len);
+  tx_vo_ring.transmit_frame(driver, data_for_arp_buf, len);
   #endif
 
   // waiting for interrupts
