@@ -43,6 +43,7 @@ Here are a few things about inspecting 802.11 management frames with wireshark o
   - [Work Queues - Understanding the Linux Kernel](https://www.oreilly.com/library/view/understanding-the-linux/0596005652/ch04s08.html)
   - [How to pass arguments for a work struct](https://stackoverflow.com/questions/7937245/how-to-use-linux-work-queue): use `container_of`
 - [netlink - wikipedia](https://en.wikipedia.org/wiki/Netlink): Uses as IPC to let user space communitate with kernel or allow different user space processes to communicate with each other. Unlike INET, netlink can not cross host boundary.
+- [DHCP - wikipedia](https://en.wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol)
 
 # Note
 
