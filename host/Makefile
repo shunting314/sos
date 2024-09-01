@@ -1,3 +1,9 @@
+all: monitor
+
+arpreq:
+	g++ arpreq.cpp
+	# sudo ./a.out
+
 monitor:
 	g++ monitor_if.cpp
-	sudo ./a.out -i wlx08beac02fa75 -f saved.frame
+	# sudo ./a.out -f saved.frame
